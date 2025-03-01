@@ -1,8 +1,11 @@
 package org.openbot.env;
 
+import static androidx.core.content.ContentProviderCompat.requireContext;
+
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.media.ToneGenerator;
+import android.opengl.GLSurfaceView;
 import android.util.Log;
 import android.util.Size;
 import android.view.SurfaceView;
@@ -87,12 +90,16 @@ public class WebRtcServer implements IVideoServer {
 
   public WebRtcServer() {}
 
+  public void setCapturer(VideoCapturer video) {
+
+  }
+
   // IVideoServer Interface
   @Override
-  public void init(Context context) {
+  public void init(Context context, VideoCapturer video) {
     this.context = context;
 
-    andGate = new AndGate(() -> startServer(), () -> stopServer());
+    andGate = new AndGate(() -> startServer(video), () -> stopServer());
     andGate.addCondition("connected");
     andGate.addCondition("view set");
     andGate.addCondition("camera permission");
@@ -166,10 +173,17 @@ public class WebRtcServer implements IVideoServer {
   // end Interface
 
   // local methods
-  private void startServer() {
+  private void startServer(VideoCapturer video) {
 
     initializeSurfaceViews();
     initializePeerConnectionFactory();
+
+    if (video == null) {
+      videoCapturer = createVideoCapturer();
+    } else {
+      videoCapturer = video;
+    }
+
     createVideoTrackFromCameraAndShowIt();
     initializePeerConnections();
 
@@ -376,15 +390,14 @@ public class WebRtcServer implements IVideoServer {
 
   private void createVideoTrackFromCameraAndShowIt() {
     audioConstraints = new MediaConstraints();
-    videoCapturer = createVideoCapturer();
     VideoSource videoSource = factory.createVideoSource(videoCapturer.isScreencast());
 
     surfaceTextureHelper =
-        SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
+            SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
     videoCapturer.initialize(
-        surfaceTextureHelper,
-        context /*getApplicationContext()*/,
-        videoSource.getCapturerObserver());
+            surfaceTextureHelper,
+            context /*getApplicationContext()*/,
+            videoSource.getCapturerObserver());
 
     videoCapturer.startCapture(VIDEO_RESOLUTION_WIDTH, VIDEO_RESOLUTION_HEIGHT, FPS);
 

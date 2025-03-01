@@ -5,8 +5,13 @@ import static org.openbot.utils.Enums.DriveMode;
 import static org.openbot.utils.Enums.SpeedMode;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.content.res.ColorStateList;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,22 +19,37 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.Navigation;
 import com.github.anastr.speedviewlib.components.Section;
-import com.google.android.material.internal.ViewUtils;
+import com.google.ar.core.Pose;
+import com.google.ar.core.TrackingFailureReason;
+import com.google.ar.core.Earth;
+import com.google.ar.core.GeospatialPose;
 import java.util.Locale;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.jetbrains.annotations.NotNull;
 import org.openbot.R;
 import org.openbot.common.ControlsFragment;
 import org.openbot.databinding.FragmentFreeRoamBinding;
 import org.openbot.env.PhoneController;
+import org.openbot.pointGoalNavigation.ArCore;
+import org.openbot.pointGoalNavigation.ArCoreListener;
+import org.openbot.pointGoalNavigation.CameraIntrinsics;
+import org.openbot.pointGoalNavigation.ImageFrame;
+import org.openbot.pointGoalNavigation.NavigationPoses;
 import org.openbot.utils.Constants;
 import org.openbot.utils.Enums;
 import org.openbot.utils.PermissionUtils;
 import timber.log.Timber;
 
-public class FreeRoamFragment extends ControlsFragment {
+public class FreeRoamFragment extends ControlsFragment implements ArCoreListener {
 
   private FragmentFreeRoamBinding binding;
   private PhoneController phoneController;
+  private ArCore arCore;
+
+  // Parameter: how frequently (in ms) the location update is sent.
+  private long locationUpdateInterval = 500; // 1000 ms = 1 second
+  private long lastLocationSentTime = 0;
 
   @Override
   public View onCreateView(
@@ -38,12 +58,33 @@ public class FreeRoamFragment extends ControlsFragment {
     return binding.getRoot();
   }
 
+  public static int dpToPx(Context context, int dp) {
+    return (int) TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp,
+            context.getResources().getDisplayMetrics()
+    );
+  }
+
   @SuppressLint("RestrictedApi")
   @Override
   public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
     super.onViewCreated(view, savedInstanceState);
 
-    phoneController = PhoneController.getInstance(requireContext());
+    boolean AR = false;
+    if (AR) {
+      // Initialize ARCore for Free Roam mode.
+      Handler handlerMain = new Handler(Looper.getMainLooper());
+
+      arCore = new ArCore(requireContext(), binding.surfaceView, handlerMain);
+      arCore.setArCoreListener(this);
+      Timber.d("Starting ARCore with Geospatial support");
+    } else {
+      arCore = null;
+      Timber.d("Not using ARCore...");
+    }
+
+    phoneController = PhoneController.getInstance(requireContext(), arCore);
 
     binding.voltageInfo.setText(getString(R.string.voltageInfo, "--.-"));
     binding.controllerContainer.speedInfo.setText(getString(R.string.speedInfo, "---,---"));
@@ -81,17 +122,17 @@ public class FreeRoamFragment extends ControlsFragment {
             0f,
             0.7f,
             getResources().getColor(R.color.green),
-            ViewUtils.dpToPx(requireContext(), 24)),
+            dpToPx(requireContext(), 24)),
         new Section(
             0.7f,
             0.8f,
             getResources().getColor(R.color.yellow),
-            ViewUtils.dpToPx(requireContext(), 24)),
+            dpToPx(requireContext(), 24)),
         new Section(
             0.8f,
             1.0f,
             getResources().getColor(R.color.red),
-            ViewUtils.dpToPx(requireContext(), 24)));
+            dpToPx(requireContext(), 24)));
 
     mViewModel
         .getUsbStatus()
@@ -115,12 +156,36 @@ public class FreeRoamFragment extends ControlsFragment {
           binding.bleToggle.setChecked(vehicle.bleConnected());
           Navigation.findNavController(requireView()).navigate(R.id.open_bluetooth_fragment);
         });
+  
   }
 
   @Override
   public void onResume() {
     super.onResume();
+    if (arCore != null) {
+      try {
+        arCore.resume();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
     binding.bleToggle.setChecked(vehicle.bleConnected());
+  }
+
+  @Override
+  public void onPause() {
+    super.onPause();
+    if (arCore != null) {
+      arCore.pause();
+    }
+  }
+
+  @Override
+  public void onDestroy() {
+    super.onDestroy();
+    if (arCore != null) {
+      arCore.closeSession();
+    }
   }
 
   @Override
@@ -294,6 +359,10 @@ public class FreeRoamFragment extends ControlsFragment {
         handleDriveCommand();
         break;
 
+      case Constants.WAYPT_DRIVE:
+        updateWaypoints();
+        break;
+
       case Constants.CMD_INDICATOR_LEFT:
         toggleIndicator(Enums.VehicleIndicator.LEFT.getValue());
         break;
@@ -329,5 +398,82 @@ public class FreeRoamFragment extends ControlsFragment {
                 Enums.SpeedMode.getByID(preferencesManager.getSpeedMode())));
         break;
     }
+  }
+
+  public void updateWaypoints() {
+    arCore.detachAnchors();
+    double lat = vehicle.waypoints.lat;
+    double lon = vehicle.waypoints.lon;
+    Timber.d("Updating waypoints: %f, %f", lat, lon);
+    Pose startPose = arCore.getStartPose();
+    if (startPose == null) {
+//        showInfoDialog(getString(R.string.no_initial_ar_core_pose));
+      return;
+    }
+    arCore.setStartAnchorAtCurrentPose();
+    arCore.setTargetAnchor(startPose.compose(Pose.makeTranslation(1, 0.0f, 1)));
+  }
+
+  /**
+   * ARCoreListener callback. Using the Geospatial API when available (VPS/GPS/Street level)
+   * and falling back to the standard ARCore pose otherwise.
+   * Only send a location update as frequently as specified by locationUpdateInterval.
+   */
+  @Override
+  public void onArCoreUpdate(NavigationPoses navigationPoses, ImageFrame rgb, CameraIntrinsics cameraIntrinsics, long timestamp) {
+    long currentTime = SystemClock.elapsedRealtime();
+    if (currentTime - lastLocationSentTime < locationUpdateInterval) {
+      return;  // Skip update if the interval hasn't elapsed.
+    }
+    lastLocationSentTime = currentTime;
+
+    JSONObject json = new JSONObject();
+    try {
+      json.put("timestamp", timestamp);
+      if (arCore.isGeospatialModeAvailable()) {
+        // If geospatial mode is available, use it.
+        GeospatialPose geoPose = arCore.getGeospatialPose();
+        json.put("type", "geospatialPoseUpdate");
+        json.put("latitude", geoPose.getLatitude());
+        json.put("longitude", geoPose.getLongitude());
+        json.put("altitude", geoPose.getAltitude());
+        json.put("heading", geoPose.getHeading());
+        // Optionally, add accuracy parameters if needed:
+        json.put("horizontalAccuracy", geoPose.getHorizontalAccuracy());
+        json.put("verticalAccuracy", geoPose.getVerticalAccuracy());
+      } else {
+        // Fallback to using the basic ARCore pose.
+        Pose currentPose = navigationPoses.getCurrentPose();
+        if (currentPose != null) {
+          json.put("type", "arPoseUpdate");
+          JSONObject translation = new JSONObject();
+          translation.put("x", currentPose.tx());
+          translation.put("y", currentPose.ty());
+          translation.put("z", currentPose.tz());
+          
+          JSONObject rotation = new JSONObject();
+          rotation.put("x", currentPose.qx());
+          rotation.put("y", currentPose.qy());
+          rotation.put("z", currentPose.qz());
+          rotation.put("w", currentPose.qw());
+          
+          json.put("translation", translation);
+          json.put("rotation", rotation);
+        }
+      }
+    } catch (JSONException e) {
+      e.printStackTrace();
+    }
+    phoneController.send(json);
+  }
+
+  @Override
+  public void onArCoreTrackingFailure(long timestamp, TrackingFailureReason trackingFailureReason) {
+    // Optionally handle any tracking failures.
+  }
+
+  @Override
+  public void onArCoreSessionPaused(long timestamp) {
+    // Optionally handle session pause events.
   }
 }

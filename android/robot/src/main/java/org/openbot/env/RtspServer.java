@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.SurfaceTexture;
 import android.media.ToneGenerator;
+import android.opengl.GLSurfaceView;
 import android.util.Log;
 import android.util.Size;
 import android.view.SurfaceHolder;
@@ -24,6 +25,8 @@ import org.openbot.utils.AndGate;
 import org.openbot.utils.ConnectionUtils;
 import org.openbot.utils.DelayedRunner;
 import org.webrtc.SurfaceViewRenderer;
+import org.webrtc.VideoCapturer;
+
 import timber.log.Timber;
 
 public class RtspServer
@@ -39,11 +42,14 @@ public class RtspServer
   private Size resolution = new Size(640, 360);
   private final int PORT = 1935;
 
+  private GLSurfaceView arSurfaceView;
+
   public RtspServer() {}
+
 
   // IVideoServer Interface
   @Override
-  public void init(Context context) {
+  public void init(Context context, VideoCapturer video) {
     this.context = context;
 
     /*
