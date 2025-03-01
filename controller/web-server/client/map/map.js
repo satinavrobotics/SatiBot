@@ -102,14 +102,24 @@ export function initMap() {
     });
     directionsRenderer.setMap(map);
 
-    // Add a marker for the robot's current position
-    const robotPosition = { lat: 47.4716, lng: 19.0502 }; // Hardcoded location
-    const robotMarker = new google.maps.Marker({
-        position: robotPosition,
-        map: map,
-        title: "Robot's Current Position",
-        icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png' // Optional: custom icon
-    });
+
+    let robotMarker = null;
+
+    // Function to update the robot's position
+    function updateRobotPosition(newPosition) {
+        if (robotMarker) {
+            robotMarker.setPosition(newPosition);
+            // set the map center to the robot's position
+            map.setCenter(newPosition);
+        } else {
+            robotMarker = new google.maps.Marker({
+                position: newPosition,
+                map: map,
+                title: "Robot's Current Position",
+                icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
+            });
+        }
+    }
 
     const missionList = document.getElementById("mission-list");
     const newMissionBtn = document.getElementById("new-mission-btn");
@@ -217,6 +227,7 @@ export function initMap() {
 }
 
 window.onload = () => {
-    initMap();
+    const map = initMap();
+    window.updateRobotPosition = map.updateRobotPosition;
     console.log("Map loaded");
 };
