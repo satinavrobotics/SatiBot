@@ -1,4 +1,5 @@
 export function initMap() {
+    const mapContainer = document.getElementById("map");
     const mapStyle = [
         {
             "elementType": "geometry",
@@ -88,7 +89,7 @@ export function initMap() {
         }
     ];
 
-    const map = new google.maps.Map(document.getElementById("map"), {
+    const map = new google.maps.Map(mapContainer, {
         center: { lat: 47.4636, lng: 19.0402 }, // Default center (Budapest District XI)
         zoom: 15,
         styles: mapStyle // Apply the dark style
@@ -214,33 +215,6 @@ export function initMap() {
         missionList.appendChild(missionItem);
     }
 }
-
-function showTab(tab) {
-    const videoTab = document.getElementById('video-tab');
-    const mapTab = document.getElementById('map-tab');
-
-    if (tab === 'video') {
-        videoTab.classList.add('active');
-        videoTab.classList.remove('inactive');
-        mapTab.classList.add('inactive');
-        mapTab.classList.remove('active');
-        // Show video panel and hide map panel
-        document.getElementById('video-panel').style.display = 'flex';
-        document.getElementById('map-panel').style.display = 'none';
-    } else {
-        mapTab.classList.add('active');
-        mapTab.classList.remove('inactive');
-        videoTab.classList.add('inactive');
-        videoTab.classList.remove('active');
-        // Show map panel and hide video panel
-        document.getElementById('map-panel').style.display = 'flex';
-        document.getElementById('video-panel').style.display = 'none';
-    }
-}
-
-// Attach showTab to the window object and make initMap globally accessible.
-window.showTab = showTab;
-window.initMap = initMap;
 
 window.onload = () => {
     initMap();
