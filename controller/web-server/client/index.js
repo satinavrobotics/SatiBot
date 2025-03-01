@@ -67,7 +67,6 @@ const connection = new Connection();
 
     keyboard.start(onKeyPress, onQuit)
 
-    console.log('Initializing gamepad...')
     initializeGamepad(sendToBot)
 })()
 
