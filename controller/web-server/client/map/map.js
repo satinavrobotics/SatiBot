@@ -218,4 +218,5 @@ export function initMap() {
 
 window.onload = () => {
     initMap();
+    console.log("Map loaded");
 };
