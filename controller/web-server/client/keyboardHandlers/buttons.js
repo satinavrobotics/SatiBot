@@ -74,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleButton.addEventListener('click', () => {
         if (commandContainer.style.display === 'none') {
             commandContainer.style.display = 'block';
+            mapPanel.style.display = 'none';
         } else {
             commandContainer.style.display = 'none';
         }
@@ -82,6 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleMapButton.addEventListener('click', () => {
         if (mapPanel.style.display === 'none') {
             mapPanel.style.display = 'block';
+            commandContainer.style.display = 'none';
         } else {
             mapPanel.style.display = 'none';
         }
