@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const commandContainer = document.getElementById('command-container');
     const toggleMapButton = document.getElementById('toggle-map');
     const mapPanel = document.getElementById('map-panel');
-    const toggleMissionButton = document.getElementById('toggle-mission');
+    const toggleMissionButton = document.getElementById('toggle-missions');
     const missionPanel = document.getElementById('mission-panel');
 
 
