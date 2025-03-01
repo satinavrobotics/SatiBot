@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenBot Controller</title>
     <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
-    <link rel="icon" href="icons/image.png">
+    <link rel="icon" href="icons/sati_logo.png">
     <link rel="stylesheet" href="style.css">
     <script src="index.js" type="module"></script>
     <script src="keyboardHandlers/buttons.js" type="module"></script>
@@ -21,7 +21,7 @@
 <div style="display:flex; flex-direction: row; justify-content: space-between; align-items: center; background: #ea2107; padding: 0 4rem; height: 5rem;">
     <!-- Logo -->
     <div style="display: flex; align-items: center;">
-        <img id="controller" src="icons/image.png" style="margin-right: 1em;" width="60"/>
+        <img id="controller" src="icons/sati_logo.png" style="margin-right: 1em;" width="60"/>
         <div style="display: flex; flex-direction: column; color: white">
             <p style="margin: 0; font-family: Gilroy-Medium, sans-serif; font-size: 1.3rem">SatiNav</p>
             <p style="font-size: 1.2rem;">Controller</p>
@@ -56,10 +56,16 @@
         </div>
         <!-- Add a button to toggle the map view -->
         <div style="display: flex; flex-direction: column; align-items: center; margin: 1em;">
-            <button id="toggle-map" style="margin-bottom: 1em;">Map</button>
-            <button id="toggle-missions" style="margin-bottom: 1em;">Missions</button>
+            <button id="toggle-map" style="margin-bottom: 1em;">
+                <img src="icons/map_icon.svg" alt="Map" width="30"/>
+            </button>
+            <button id="toggle-missions" style="margin-bottom: 1em;">
+                <img src="icons/missions_icon.svg" alt="Missions" width="30"/>
+            </button>
             <!-- Add a button to toggle the control guide -->
-            <button id="toggle-controls">Control Guide</button>
+            <button id="toggle-controls">
+                <img src="icons/guide_icon.svg" alt="Control Guide" width="30"/>
+            </button>
         </div>
 
         <!-- Command Sidebar -->
