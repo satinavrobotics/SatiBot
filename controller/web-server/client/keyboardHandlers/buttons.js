@@ -68,12 +68,22 @@ export function Buttons (connection) {
 document.addEventListener('DOMContentLoaded', () => {
     const toggleButton = document.getElementById('toggle-controls');
     const commandContainer = document.getElementById('command-container');
+    const toggleMapButton = document.getElementById('toggle-map');
+    const mapPanel = document.getElementById('map-panel');
 
     toggleButton.addEventListener('click', () => {
         if (commandContainer.style.display === 'none') {
             commandContainer.style.display = 'block';
         } else {
             commandContainer.style.display = 'none';
+        }
+    });
+
+    toggleMapButton.addEventListener('click', () => {
+        if (mapPanel.style.display === 'none') {
+            mapPanel.style.display = 'block';
+        } else {
+            mapPanel.style.display = 'none';
         }
     });
 });
