@@ -237,11 +237,14 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
     ControllerToBotEventBus.subscribe(
         this.getClass().getSimpleName(),
         event -> {
+          Timber.d("event " + event.toString());
           String commandType = "";
           if (event.has("command")) {
             commandType = event.getString("command");
           } else if (event.has("driveCmd")) {
             commandType = Constants.CMD_DRIVE;
+          } else if (event.has("WAYPT_CMD")) {
+            commandType = Constants.WAYPT_DRIVE;
           } else if (event.has("server")) {
             for (int i = 0; i < serverSpinner.getAdapter().getCount(); i++) {
               if(event.getString("server").equals("noServerFound")){
@@ -260,6 +263,16 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
                   new Control(
                       Float.parseFloat(driveValue.getString("l")),
                       Float.parseFloat(driveValue.getString("r"))));
+              break;
+
+            case Constants.WAYPT_DRIVE:
+              // TODO: extract coordinates from message and set as waypoint
+              JSONObject waypointValue = event.getJSONObject("WAYPT_CMD");
+
+              vehicle.updateWaypoints(
+                              Float.parseFloat(waypointValue.getString("lat")),
+                              Float.parseFloat(waypointValue.getString("lon"))
+              );
               break;
 
             case Constants.CMD_INDICATOR_LEFT:
@@ -295,7 +308,7 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
         error -> {
           Log.d(null, "Error occurred in ControllerToBotEventBus: " + error);
         },
-        event -> event.has("command") || event.has("driveCmd") || event.has("server") // filter out everything else
+        event -> event.has("command") || event.has("driveCmd") || event.has("server") || event.has("WAYPT_CMD")// filter out everything else
         );
   }
 

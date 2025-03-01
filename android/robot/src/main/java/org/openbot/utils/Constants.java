@@ -34,6 +34,7 @@ public class Constants {
 
   // Controller Commands
   public static final String CMD_DRIVE = "DRIVE_CMD";
+  public static final String WAYPT_DRIVE = "WAYPT_CMD";
   public static final String CMD_LOGS = "LOGS";
   public static final String CMD_NOISE = "NOISE";
   public static final String CMD_INDICATOR_LEFT = "INDICATOR_LEFT";

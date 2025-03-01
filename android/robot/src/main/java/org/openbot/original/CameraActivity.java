@@ -199,7 +199,7 @@ public abstract class CameraActivity extends AppCompatActivity
     audioPlayer = new AudioPlayer(context);
     vehicle = OpenBotApplication.vehicle;
 
-    phoneController = PhoneController.getInstance(this);
+    phoneController = PhoneController.getInstance(context);
     preferencesManager = new SharedPreferencesManager(this);
 
     setContentView(R.layout.activity_camera);

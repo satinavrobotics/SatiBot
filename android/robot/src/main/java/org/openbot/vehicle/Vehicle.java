@@ -52,6 +52,11 @@ public class Vehicle {
   private BluetoothManager bluetoothManager;
   SharedPreferences sharedPreferences;
   public String connectionType;
+  public Waypoints waypoints = new Waypoints();
+
+  public void updateWaypoints(double lat, double lon) {
+    waypoints.updateWaypoints(lat, lon);
+  }
 
   public float getMinMotorVoltage() {
     return minMotorVoltage;

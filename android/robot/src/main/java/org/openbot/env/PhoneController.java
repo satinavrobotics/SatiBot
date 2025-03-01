@@ -2,9 +2,11 @@ package org.openbot.env;
 
 import android.app.Activity;
 import android.content.Context;
+import android.opengl.GLSurfaceView;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -18,6 +20,7 @@ import org.json.JSONObject;
 import org.openbot.R;
 import org.openbot.customview.AutoFitSurfaceGlView;
 import org.openbot.customview.WebRTCSurfaceView;
+import org.openbot.pointGoalNavigation.ArCore;
 import org.openbot.utils.CameraUtils;
 
 import okhttp3.OkHttpClient;
@@ -42,9 +45,24 @@ public class PhoneController {
       synchronized (PhoneController.class) { // Check for the second time.
         // if there is no instance available... create new one
         if (_phoneController == null) _phoneController = new PhoneController();
-        _phoneController.init(context);
+        _phoneController.initConnection(context);
       }
     }
+
+    return _phoneController;
+  }
+
+  public static PhoneController getInstance(Context context, ArCore arCore) {
+    _phoneController = PhoneController.getInstance(context);
+
+    if (_phoneController != null) { // Check for the first time
+      synchronized (PhoneController.class) { // Check for the second time.
+        if (_phoneController.videoServer == null) {
+          _phoneController.initVideoServer(context, arCore);
+        }
+      }
+    }
+
 
     return _phoneController;
   }
@@ -56,27 +74,35 @@ public class PhoneController {
     }
   }
 
-  private void init(Context context) {
-    ControllerConfig.getInstance().init(context);
-
-    videoServer =
-        "RTSP".equals(ControllerConfig.getInstance().getVideoServerType())
-            ? new RtspServer()
-            : new WebRtcServer();
-
-    videoServer.init(context);
-    videoServer.setCanStart(true);
+  private void initConnection(Context context) {
 
     this.connectionSelector = ConnectionSelector.getInstance(context);
     connectionSelector.getConnection().setDataCallback(new DataReceived());
 
-    android.util.Size resolution =
-        CameraUtils.getClosestCameraResolution(context, new android.util.Size(640, 360));
-    videoServer.setResolution(resolution.getWidth(), resolution.getHeight());
+    Timber.d("Connection Selector ready!");
 
     handleBotEvents();
-    createAndSetView(context);
     monitorConnection();
+  }
+
+  private void initVideoServer(Context context, ArCore arCore) {
+    ControllerConfig.getInstance().init(context);
+
+    videoServer =
+            "RTSP".equals(ControllerConfig.getInstance().getVideoServerType())
+                    ? new RtspServer()
+                    : new WebRtcServer();
+
+    videoServer.init(context, arCore);
+    videoServer.setCanStart(true);
+
+    Timber.d("Video server ready!");
+
+    android.util.Size resolution =
+            CameraUtils.getClosestCameraResolution(context, new android.util.Size(640, 360));
+    videoServer.setResolution(resolution.getWidth(), resolution.getHeight());
+
+    createAndSetView(context);
   }
 
   private void createAndSetView(Context context) {

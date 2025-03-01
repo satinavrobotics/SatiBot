@@ -99,7 +99,7 @@ public class GoogleServices extends Fragment {
                 new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                         .requestEmail()
                         .requestIdToken(
-                                "955078484078-kbadvp54dljcpk0g0j5bnf5c17q63ir2.apps.googleusercontent.com")
+                                "154487542187-g3aoqeo07p43avsjkppvj2unmq51s38m.apps.googleusercontent.com")
                         .requestProfile()
                         .build();
         // Set up Shared Preferences

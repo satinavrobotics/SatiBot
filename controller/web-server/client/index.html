@@ -54,11 +54,16 @@
                 <img id="fullscreen" class="button" src="icons/fullscreen_black_24dp.svg" width="30"/>
             </div>
         </div>
+        <!-- Add a button to toggle the control guide -->
+        <button id="toggle-controls" style="margin: 1em;">Control Guide</button>
+
         <!-- Command Sidebar -->
-        <ul id="command-list"
-            style="list-style-type: none; background: white; border-radius: 4px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.15); padding: 15px; margin: 0; width: fit-content; max-height: 100%; min-height: 100%; min-width: 200px; overflow-y: auto;">
-            <h3>Controls</h3>
-        </ul>
+        <div id="command-container" style="display: none;">
+            <ul id="command-list"
+                style="list-style-type: none; background: white; border-radius: 4px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.15); padding: 15px; margin: 0; width: fit-content; max-height: 100%; min-height: 100%; min-width: 200px; overflow-y: auto;">
+                <h3>Controls</h3>
+            </ul>
+        </div>
     </div>
     <div class="logout-wrapper">
         <div class="logout">
