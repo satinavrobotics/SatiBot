@@ -70,11 +70,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const commandContainer = document.getElementById('command-container');
     const toggleMapButton = document.getElementById('toggle-map');
     const mapPanel = document.getElementById('map-panel');
+    const missionButton = document.getElementById('toggle-mission');
+    const missionPanel = document.getElementById('mission-panel');
+
 
     toggleButton.addEventListener('click', () => {
         if (commandContainer.style.display === 'none') {
             commandContainer.style.display = 'block';
             mapPanel.style.display = 'none';
+            missionPanel.style.display = 'none';
         } else {
             commandContainer.style.display = 'none';
         }
@@ -84,8 +88,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (mapPanel.style.display === 'none') {
             mapPanel.style.display = 'block';
             commandContainer.style.display = 'none';
+            missionPanel.style.display = 'none';
         } else {
             mapPanel.style.display = 'none';
+        }
+    });
+
+    toggleMissionButton.addEventListener('click', () => {
+        if (missionPanel.style.display === 'none') {
+            missionPanel.style.display = 'block';
+            commandContainer.style.display = 'none';
+            mapPanel.style.display = 'none';
+        } else {
+            missionPanel.style.display = 'none';
         }
     });
 });
