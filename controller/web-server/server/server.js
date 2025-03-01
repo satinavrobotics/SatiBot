@@ -1,11 +1,22 @@
+const fs = require('fs');
+const https = require('https');
 const WebSocket = require('ws');
 
-const wss = new WebSocket.Server({ port: 8080 }, () => {
-    console.log("Signaling server is now listening on port 8080");
+const server = https.createServer({
+    cert: fs.readFileSync('/home/admin/.ssl_cert/fullchain.pem'),
+    key: fs.readFileSync('/home/admin/.ssl_cert/privkey.pem')
+});
+
+const wss = new WebSocket.Server({ port: 8001 }, () => {
+    console.log("Signaling server is now listening on port 8001");
+});
+const wss_secure = new WebSocket.Server({ server }, () => {
+    console.log("Secure signaling server is now listening on port 8080");
 });
 let rooms = new Map();
-wss.on('connection', (ws) => {
-    console.log(`Client connected. Total connected clients: ${wss.clients.size}`);
+
+const onConnection = (ws) => {
+    console.log(`Client connected. Total connected clients: ${wss.clients.size + wss_secure.clients.size}`);
     askIdOfClient(ws);
     ws.on("message", function message(data, isBinary) {
 
@@ -13,12 +24,10 @@ wss.on('connection', (ws) => {
         // console.log(JSON.parse(message));
         let msg = JSON.parse(message);
 
-        if (Object.keys(msg)[0] === 'roomId') {
+        if (msg.hasOwnProperty('roomId'))
             createOrJoinRoom(msg.roomId, ws);
-            ws.id = msg.roomId;
-            return;
-        }
-        else if (Object.keys(msg)[0] === 'driveCmd') {
+
+        if (Object.keys(msg)[0] === 'driveCmd') {
             let driveCmd = msg.driveCmd;
             console.log(driveCmd);
         }
@@ -50,7 +59,7 @@ wss.on('connection', (ws) => {
 
 
     ws.onclose = (socket) => {
-        console.log(`Client disconnected. Total connected clients: ${wss.clients.size}`);
+        console.log(`Client disconnected. Total connected clients: ${wss.clients.size + wss_secure.clients.size}`);
         let room = rooms.get(ws.id);
         if (room === undefined){
             return
@@ -61,7 +70,7 @@ wss.on('connection', (ws) => {
         console.log(rooms)
     };
 
-});
+};
 
 // Function to ask for client's roomId
 const askIdOfClient = (ws) => {
@@ -73,12 +82,16 @@ const askIdOfClient = (ws) => {
 
 const createOrJoinRoom = (roomId, ws) => {
     // Check if the room with the given roomId exists
-    if (!rooms.has(roomId) || rooms.get(roomId).clients[1] !== null) {
+    if (!rooms.has(roomId)) { // || rooms.get(roomId).clients[1] !== null) {
         // Room does not exist or is full (has two clients already)
         let room = {
             clients: [ws, null]
         };
         rooms.set(roomId, room);
+    } else if (rooms.get(roomId).clients[1] !== null) {
+        // Room exists but is full
+        console.log("Room is full",rooms);
+        return;
     } else {
         // Room exists and has space for the new client
         console.log("joining to the room",rooms);
@@ -86,6 +99,7 @@ const createOrJoinRoom = (roomId, ws) => {
         room.clients[1] = ws;
         rooms.set(roomId, room);
     }
+    ws.id = roomId;
 };
 
 // Broadcast to all.
@@ -98,6 +112,18 @@ wss.broadcast = (ws, data) => {
         }
     });
 };
+
+
+wss_secure.broadcast = (ws, data) => {
+    let obj = JSON.parse(data);
+    let key = Object.keys(obj)[0];
+    wss.clients.forEach((client) => {
+        if (client !== ws && client.readyState === WebSocket.OPEN) {
+            client.send(data);
+        }
+    });
+};
+
 
 // Broadcast to all clients in a specific room.
 const broadcastToRoom = (room, message) => {
@@ -116,3 +142,10 @@ const sendToBot = (ws, message) => {
         }
     });
 }
+
+wss.on('connection', onConnection);
+wss_secure.on('connection', onConnection);
+
+server.listen(8080, () => {
+    console.log("HTTPS server is now listening on port 8080");
+});

@@ -109,4 +109,31 @@ export function RemoteKeyboard (commandHandler) {
         }
     }
   }
+
+  this.processGamepad = (gamepad) => {
+    if (!gamepad) return;
+    // check if empty
+
+    // Assuming gamepad.axes[0] is the left joystick horizontal axis
+    // gamepad.axes[2] is the right trigger, gamepad.axes[5] is the left trigger
+    const leftJoystickX = gamepad.axes[0];
+    const rightTrigger = gamepad.buttons[7].value; // Right trigger (RT)
+    const leftTrigger = gamepad.buttons[6].value;  // Left trigger (LT)
+
+    // Calculate thrust based on trigger values
+    const forwardThrust = rightTrigger; // RT for forward
+    const backwardThrust = leftTrigger; // LT for backward
+
+    // Calculate steering based on left joystick horizontal axis
+    const steering = leftJoystickX;
+
+    // Calculate left and right drive values
+    const leftDrive = forwardThrust - backwardThrust + steering;
+    const rightDrive = forwardThrust - backwardThrust - steering;
+
+    //console.log(leftDrive, rightDrive);
+
+    // Send drive command using the command handler
+    commandHandler.gamepadCommand(leftDrive, rightDrive);
+  };
 }

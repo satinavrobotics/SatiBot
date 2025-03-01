@@ -15,9 +15,10 @@ import {ErrorDisplay} from '../utils/error-display.js'
  */
 export function Connection () {
     const connectToServer = async () => {
-        const ws = new WebSocket(`ws://${window.location.hostname}:8080/ws`)
+        // const ws = new WebSocket(`ws://${window.location.hostname}:8080/ws`)
         // const ws = new WebSocket(`ws://verdant-imported-peanut.glitch.me`);
-        return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`wss://34.168.246.84:8080/ws`);
+	return new Promise((resolve, reject) => {
             const timer = setInterval(() => {
                 if (ws.readyState === 1) {
                     clearInterval(timer)
