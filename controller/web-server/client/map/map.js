@@ -120,6 +120,7 @@ export function initMap() {
             });
         }
     }
+    window.updateRobotPosition = updateRobotPosition;
 
     const missionList = document.getElementById("mission-list");
     const newMissionBtn = document.getElementById("new-mission-btn");
@@ -227,7 +228,6 @@ export function initMap() {
 }
 
 window.onload = () => {
-    const map = initMap();
-    window.updateRobotPosition = map.updateRobotPosition;
+    initMap();
     console.log("Map loaded");
 };
