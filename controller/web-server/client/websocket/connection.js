@@ -48,8 +48,6 @@ export function Connection () {
             if (Object.keys(msg)[0] === 'roomId' && !idSent) {
                 idSent = true
             } else {
-                console.log(webSocketMessage.data)
-                console.log('Data Displayed')
                 onData(webSocketMessage.data)
             }
         }

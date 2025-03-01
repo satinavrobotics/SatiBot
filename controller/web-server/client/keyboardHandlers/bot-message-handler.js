@@ -60,6 +60,14 @@ export function BotMessageHandler (connection) {
                 connection.send(JSON.stringify(msg))
                 // webRtc.send(JSON.stringify(msg))
                 break
+            
+            case 'LOCATION':
+                window.updateRobotPosition({
+                    lat: msg.LOCATION.latitude,
+                    lng: msg.LOCATION.longitude
+                })
+                console.log(msg.LOCATION)  
+                break
 
             default:
                 // Process other status information here

@@ -21,7 +21,7 @@ import {initializeGamepad } from './keyboardHandlers/gamepad.js'
 const connection = new Connection();
 (async () => {
     const keyboard = new Keyboard()
-    const botMessageHandler = new BotMessageHandler(connection)
+    const botMessageHandler = new BotMessageHandler(connection, )
 
     const onData = data => {
         const msg = JSON.parse(data)
