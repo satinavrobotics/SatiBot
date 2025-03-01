@@ -64,7 +64,7 @@ export function Buttons (connection) {
   fullscreenButton.onclick = goFullscreen
 }
 
-// Add this script to handle the toggle functionality
+
 document.addEventListener('DOMContentLoaded', () => {
     const toggleButton = document.getElementById('toggle-controls');
     const commandContainer = document.getElementById('command-container');
