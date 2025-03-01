@@ -104,7 +104,7 @@ export function initMap() {
 
 
     let robotMarker = null;
-
+    let robotPosition = null;
     // Function to update the robot's position
     function updateRobotPosition(newPosition) {
         if (robotMarker) {
@@ -119,6 +119,7 @@ export function initMap() {
                 icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
             });
         }
+        robotPosition = newPosition;
     }
     window.updateRobotPosition = updateRobotPosition;
 
@@ -189,6 +190,10 @@ export function initMap() {
         const goButton = document.createElement("button");
         goButton.textContent = "Go";
         goButton.onclick = () => {
+            if (!robotPosition) {
+                alert("Please set the robot's position first.");
+                return;
+            }
             // Query the directions API from the robot's current position to the mission location.
             directionsService.route({
                 origin: robotPosition,
