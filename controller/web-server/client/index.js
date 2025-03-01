@@ -16,6 +16,7 @@ import {WebRTC} from './webRTC/webrtc.js'
 import {signInWithCustomToken} from 'firebase/auth'
 import {auth, googleSigIn, googleSignOut} from './firebase/authentication'
 import {localStorageKeys} from './utils/constants'
+import {initializeGamepad } from './keyboardHandlers/gamepad.js'
 
 const connection = new Connection();
 (async () => {
@@ -65,6 +66,9 @@ const connection = new Connection();
     }
 
     keyboard.start(onKeyPress, onQuit)
+
+    console.log('Initializing gamepad...')
+    initializeGamepad(sendToBot)
 })()
 
 export let signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))

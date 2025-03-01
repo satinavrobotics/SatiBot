@@ -61,6 +61,10 @@ export function CommandHandler (sendToBot) {
     commandReducer.send({ driveCmd: { l: left, r: right } }, sendToBot)
   }
 
+   this.gamepadCommand = (left, right) => {
+    sendDriveCommand(left, right)
+  }
+
   this.reset = () => {
     left.reset()
     right.reset()
