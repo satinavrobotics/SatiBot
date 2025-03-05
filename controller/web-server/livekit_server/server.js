@@ -35,6 +35,6 @@ app.post('/createToken', async (req, res) => {
 });
 
 const PORT = process.env.LIVEKIT_PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0' ,() => {
   console.log(`Server running on port ${PORT}`);
 });
