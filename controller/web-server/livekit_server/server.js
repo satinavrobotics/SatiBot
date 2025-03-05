@@ -13,7 +13,7 @@ app.post('/createToken', async (req, res) => {
   try {
     const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
       identity: participantName,
-      ttl: 6000, // 10 minutes in seconds
+      ttl: process.env.LIVEKIT_TTL, // 100 minutes in seconds
     });
 
     at.addGrant({ roomJoin: true, room: roomName });
@@ -25,7 +25,7 @@ app.post('/createToken', async (req, res) => {
   }
 });
 
-const PORT = 8041;
+const PORT = process.env.LIVEKIT_PORT;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
