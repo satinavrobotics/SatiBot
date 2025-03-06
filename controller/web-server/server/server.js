@@ -2,17 +2,10 @@ const fs = require('fs');
 const https = require('https');
 const WebSocket = require('ws');
 
-const server = https.createServer({
-    cert: fs.readFileSync('/home/admin/.ssl_cert/fullchain.pem'),
-    key: fs.readFileSync('/home/admin/.ssl_cert/privkey.pem')
-});
+const use_ws = false;
+const use_wss = false;
 
-const wss = new WebSocket.Server({ port: 8001 }, () => {
-    console.log("Signaling server is now listening on port 8001");
-});
-const wss_secure = new WebSocket.Server({ server }, () => {
-    console.log("Secure signaling server is now listening on port 8080");
-});
+
 let rooms = new Map();
 
 const onConnection = (ws) => {
@@ -102,27 +95,8 @@ const createOrJoinRoom = (roomId, ws) => {
     ws.id = roomId;
 };
 
-// Broadcast to all.
-wss.broadcast = (ws, data) => {
-    let obj = JSON.parse(data);
-    let key = Object.keys(obj)[0];
-    wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(data);
-        }
-    });
-};
 
 
-wss_secure.broadcast = (ws, data) => {
-    let obj = JSON.parse(data);
-    let key = Object.keys(obj)[0];
-    wss.clients.forEach((client) => {
-        if (client !== ws && client.readyState === WebSocket.OPEN) {
-            client.send(data);
-        }
-    });
-};
 
 
 // Broadcast to all clients in a specific room.
@@ -143,9 +117,44 @@ const sendToBot = (ws, message) => {
     });
 }
 
-wss.on('connection', onConnection);
-wss_secure.on('connection', onConnection);
+if (use_ws) {
 
-server.listen(8080, () => {
-    console.log("HTTPS server is now listening on port 8080");
-});
+    const wss = new WebSocket.Server({ port: 8001 }, () => {
+        console.log("Signaling server is now listening on port 8001");
+    });
+    wss.on('connection', onConnection);
+    // Broadcast to all.
+    wss.broadcast = (ws, data) => {
+        let obj = JSON.parse(data);
+        let key = Object.keys(obj)[0];
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(data);
+            }
+        });
+    };
+}
+if (use_wss) {
+    const wss_secure = new WebSocket.Server({ server }, () => {
+        console.log("Secure signaling server is now listening on port 8080");
+    });
+    wss_secure.broadcast = (ws, data) => {
+        let obj = JSON.parse(data);
+        let key = Object.keys(obj)[0];
+        wss.clients.forEach((client) => {
+            if (client !== ws && client.readyState === WebSocket.OPEN) {
+                client.send(data);
+            }
+        });
+    };
+    wss_secure.on('connection', onConnection);
+    const server = https.createServer({
+        cert: fs.readFileSync('/home/admin/.ssl_cert/fullchain.pem'),
+        key: fs.readFileSync('/home/admin/.ssl_cert/privkey.pem')
+    });
+    server.listen(8080, () => {
+        console.log("HTTPS server is now listening on port 8080");
+    });s
+}
+
+

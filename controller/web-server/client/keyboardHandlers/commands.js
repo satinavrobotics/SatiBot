@@ -52,9 +52,7 @@ export function CommandHandler (sendToBot) {
   const commandReducer = new DriveCommandReducer()
 
   this.sendCommand = (command) => {
-    const commandObj = { command: command }
-    const jsonString = JSON.stringify(commandObj)
-    sendToBot(jsonString)
+    sendToBot({ command: command })
   }
 
   const sendDriveCommand = (left, right) => {
@@ -114,9 +112,7 @@ function DriveCommandReducer () {
       return
     }
     lastCommand = commandAsJson
-
-    const strCommand = JSON.stringify(commandAsJson)
-    sendToBot(strCommand)
+    sendToBot(commandAsJson)
   }
 
   const isEqual = (current, last) => {

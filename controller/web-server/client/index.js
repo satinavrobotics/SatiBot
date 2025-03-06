@@ -1,73 +1,27 @@
-/*
- * Developed for the OpenBot project (https://openbot.org) by:
- *
- * Ivo Zivkov
- * izivkov@gmail.com
- *
- * Date: Mon Nov 29 2021
- */
-
-import {Connection} from './websocket/connection.js'
 import {Keyboard} from './keyboardHandlers/keyboard.js'
-import {BotMessageHandler} from './keyboardHandlers/bot-message-handler'
 import {Commands} from './keyboardHandlers/commands'
 import {RemoteKeyboard} from './keyboardHandlers/remote_keyboard'
-import {WebRTC} from './webRTC/webrtc.js'
 import {signInWithCustomToken} from 'firebase/auth'
 import {auth, googleSigIn, googleSignOut} from './firebase/authentication'
 import {localStorageKeys} from './utils/constants'
-import {initializeGamepad } from './keyboardHandlers/gamepad.js'
+import {Gamepad } from './keyboardHandlers/gamepad.js'
+import {LiveKitClient} from './livekit/livekit.js'
 
-const connection = new Connection();
+
+const connection = new LiveKitClient();
 (async () => {
     const keyboard = new Keyboard()
-    const botMessageHandler = new BotMessageHandler(connection, )
+    const gamepad = new Gamepad()
 
-    const onData = data => {
-        const msg = JSON.parse(data)
-        botMessageHandler.handle(JSON.parse(data).status, connection)
-    }
+    // connect to room
+    await connection.start()
+    const command = new Commands((cmd)=>connection.sendToBot(cmd))
+    const remoteKeyboard = new RemoteKeyboard(command.getCommandHandler())
+    const onKeyPress = (key) => remoteKeyboard.processKey(key)
+    const onGamePadInput = (gamepad) => remoteKeyboard.processGamepad(gamepad)
 
-    const onQuit = () => {
-        connection.stop()
-    }
-
-    await connection.start(onData)
-    const webRtc = new WebRTC(connection)
-    const sendToBot = (key) => {
-        const msg = JSON.parse(key)
-        let commands = {}
-        if (msg.driveCmd !== undefined) {
-            commands = {
-                driveCmd: msg.driveCmd,
-                roomId: signedInUser.email
-            }
-        } else {
-            commands = {
-                command: msg.command,
-                roomId: signedInUser.email
-            }
-        }
-        // connection.send(JSON.stringify(commands)) //This is for sending via socket)
-        botMessageHandler.handle(commands, connection) // This is for sending via webRtc
-    }
-    const onKeyPress = (key) => {
-        const command = new Commands(sendToBot)
-        const remoteKeyboard = new RemoteKeyboard(command.getCommandHandler())
-        // Send keypress to server
-        const keyPressObj = {KEYPRESS: key}
-        console.log(keyPressObj.KEYPRESS.key)
-        if (keyPressObj.KEYPRESS.key === 'Escape') {
-            if (webRtc != null) {
-                webRtc.stop()
-            }
-        }
-        remoteKeyboard.processKey(keyPressObj.KEYPRESS)
-    }
-
-    keyboard.start(onKeyPress, onQuit)
-
-    initializeGamepad(sendToBot)
+    keyboard.start(onKeyPress, () => connection.stop())
+    gamepad.start(onGamePadInput)
 })()
 
 export let signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))
@@ -114,7 +68,7 @@ function sendId() {
     const response = {
         roomId: signedInUser.email
     }
-    connection.send(JSON.stringify(response))
+    //connection.send(JSON.stringify(response))
 }
 
 /**
