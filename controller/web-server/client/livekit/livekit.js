@@ -71,8 +71,9 @@ export function LiveKitClient() {
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind === Track.Kind.Video) {
         const streamElement = track.attach();
-        const videoElement = document.getElementById('video')
+        const videoElement = document.getElementById('video');
         videoElement.srcObject = streamElement.srcObject;
+        videoElement.play();
       }
     });
   }
