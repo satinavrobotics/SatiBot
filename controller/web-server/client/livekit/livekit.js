@@ -72,7 +72,7 @@ export function LiveKitClient() {
       if (track.kind === Track.Kind.Video) {
         const streamElement = track.attach();
         const videoElement = document.getElementById('video')
-        videoElement.srcObject = streamElement;
+        videoElement.srcObject = streamElement.srcObject;
       }
     });
   }
