@@ -1,6 +1,7 @@
 import { Room, RoomEvent, Track } from 'livekit-client';
 import axios from 'axios';
 import {localStorageKeys} from '../utils/constants'
+import { Buttons } from '../keyboardHandlers/buttons';
 
 /**
  * function to enable webRTC connection
@@ -65,13 +66,18 @@ export function LiveKitClient() {
     // publish to topic
   }
 
-  
+  let buttons = null;
 
   this.setupListeners = () => {
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind === Track.Kind.Video) {
-        const streamElement = track.attach();
-        document.getElementById("video").appendChild(streamElement);
+        attributes = participant.attributes();
+        camera_metadata = JSON.parse(attributes.getItem("CAMERA_METADATA"));
+        console.log(camera_metadata);
+        buttons = new Buttons(this, camera_metadata);
+
+        const streamElement = track.attach("video");
+        //document.getElementById("video").appendChild(streamElement);
       }
     });
   }
