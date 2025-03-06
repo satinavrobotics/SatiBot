@@ -7,7 +7,7 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-app.post('/createToken', async (req, res) => {
+app.post('/api/createToken', async (req, res) => {
   const { participantName = 'quickstart-username', roomName = 'quickstart-room' } = req.body;
   console.log("Creating token for " + participantName + " at " + roomName );
   
@@ -30,11 +30,12 @@ app.post('/createToken', async (req, res) => {
       server_url: process.env.LIVEKIT_SERVER_URL
     });
   } catch (error) {
+    console.error('Error generating token:', error);
     res.status(500).json({ error: 'Error generating token', details: error.message });
   }
 });
 
 const PORT = process.env.LIVEKIT_PORT || 3000;
-app.listen(PORT, '0.0.0.0' ,() => {
+app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
