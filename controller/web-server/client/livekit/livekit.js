@@ -39,6 +39,8 @@ export function LiveKitClient() {
       connectToRoom(url, token);
     }
 
+    this.setupListeners();
+
     // setup buttons
   }
 
