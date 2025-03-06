@@ -11,12 +11,17 @@ import { Buttons } from '../keyboardHandlers/buttons';
 export function LiveKitClient() {
   const room = new Room({adaptiveStream: true, dynacast: true,});
 
+  const isTokenExpired = (expirationTime) => {
+    const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
+    return currentTime > expirationTime;
+  }
+
   this.start = () => {
     let url = localStorage.getItem('livekit_url');
     let token = localStorage.getItem('livekit_token');
     let expiration = localStorage.getItem('livekit_expiration');
 
-    if (!url || !token || !expiration || new Date() > new Date(expiration)) {
+    if (!url || !token || !expiration || isTokenExpired(expiration)) {
       const signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))
       const userEmail = signedInUser.email;
       console.log("calling /api/createToken")
@@ -71,8 +76,7 @@ export function LiveKitClient() {
   this.setupListeners = () => {
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       if (track.kind === Track.Kind.Video) {
-        attributes = participant.attributes();
-        camera_metadata = JSON.parse(attributes.getItem("CAMERA_METADATA"));
+        let camera_metadata = participant.metadata
         console.log(camera_metadata);
         buttons = new Buttons(this, camera_metadata);
 
