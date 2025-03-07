@@ -7,12 +7,11 @@
  * Date: Mon Nov 29 2021
  */
 
-export function Buttons (connection, camera_metadata) {
+export function Buttons (connection, available_cameras) {
   // MIRROR
   const toggleMirror = () => {
     const video = document.getElementById('video')
     const isMirrored = video.style.cssText !== ''
-    this.setMirrored(!isMirrored)
     // 'translateX' changes between -50% and +50% to keep video centered
     video.style.cssText = !isMirrored
       ? '-moz-transform: scale(-1, 1) translateX(50%); -webkit-transform: scale(-1, 1) translateX(50%); -o-transform: scale(-1, 1) translateX(50%); transform: scale(-1, 1) translateX(50%); filter: FlipH;'
@@ -34,16 +33,35 @@ export function Buttons (connection, camera_metadata) {
   soundButton.onclick = toggleSound
 
 
-  this.setMirrored = mirrored => {
+  // CAMERAS
+  const mainCameraButton = document.getElementById('camera_switch_main')
+  const wideCameraButton = document.getElementById('camera_switch_wide')
+  const telephotoCameraButton = document.getElementById('camera_switch_telephoto')
+  const frontCameraButton = document.getElementById('camera_switch_front')
+
+  if (available_cameras.hasOwnProperty("main")) {
+    mainCameraButton.onclick = () => connection.switchCamera(available_cameras.main)
+  } else {
+    mainCameraButton.remove();
   }
 
-  // camera switch
-  const switchCamera = () => {
-    connection.send(JSON.stringify({ command: 'SWITCH_CAMERA' }));
+  if (available_cameras.hasOwnProperty("wide")) {
+    wideCameraButton.onclick = () => connection.switchCamera(available_cameras.wide)
+  } else {
+    wideCameraButton.remove();
   }
 
-  const cameraSwitchButton = document.getElementById('camera_switch_button')
-  cameraSwitchButton.onclick = switchCamera
+  if (available_cameras.hasOwnProperty("telephoto")) {
+    telephotoCameraButton.onclick = () => connection.switchCamera(available_cameras.telephoto)
+  } else {
+    telephotoCameraButton.remove();
+  }
+
+  if (available_cameras.hasOwnProperty("front")) {
+    frontCameraButton.onclick = () => connection.switchCamera(available_cameras.front)
+  } else {
+    frontCameraButton.remove();
+  }
 
   // fullscreen
   const goFullscreen = () => {

@@ -113,6 +113,7 @@ export function RemoteKeyboard (commandHandler) {
   this.processGamepad = (gamepad) => {
     if (!gamepad) return;
     // check if empty
+    console.log(gamepad)
 
     // Assuming gamepad.axes[0] is the left joystick horizontal axis
     // gamepad.axes[2] is the right trigger, gamepad.axes[5] is the left trigger

@@ -106,7 +106,7 @@ export function initMap() {
     let robotMarker = null;
     let robotPosition = null;
     // Function to update the robot's position
-    function updateRobotPosition(newPosition) {
+    const updateRobotPosition = (newPosition) => {
         if (robotMarker) {
             robotMarker.setPosition(newPosition);
             // set the map center to the robot's position
@@ -121,7 +121,13 @@ export function initMap() {
         }
         robotPosition = newPosition;
     }
-    window.updateRobotPosition = updateRobotPosition;
+
+
+    window.startLocationService = (connection) => {
+        setInterval(() => {
+            connection.getLocation(updateRobotPosition);
+        }, 1000);
+    }
 
     const missionList = document.getElementById("mission-list");
     const newMissionBtn = document.getElementById("new-mission-btn");
@@ -233,6 +239,6 @@ export function initMap() {
 }
 
 window.onload = () => {
-    initMap();
+    const map = new initMap();
     console.log("Map loaded");
 };
