@@ -12,10 +12,11 @@ export function Gamepad(callback) {
             if (gamepadIndex !== null) {
                 const gamepad = navigator.getGamepads()[gamepadIndex];
                 if (gamepad) {
-                    onGamePadInput({gamepad: gamepad})
+                    console.log(gamepad)
+                    onGamePadInput(gamepad)
                 }
             }
-            requestAnimationFrame(startGamepadPolling);
+            requestAnimationFrame(this.start);
         });
       
         window.addEventListener('gamepaddisconnected', (event) => {

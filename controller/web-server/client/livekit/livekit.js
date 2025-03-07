@@ -10,6 +10,7 @@ import { Buttons } from '../keyboardHandlers/buttons';
  */
 export function LiveKitClient() {
   const room = new Room({adaptiveStream: true, dynacast: true,});
+  let buttons = null;
 
   const isTokenExpired = (expirationTime) => {
     const currentTime = Math.floor(Date.now() / 1000); // Current time in seconds
@@ -50,39 +51,111 @@ export function LiveKitClient() {
     // setup buttons
   }
 
-  const connectToRoom = (url, token) => {
+  const connectToRoom = async (url, token) => {
     // pre-warm connection, this can be called as early as your page is loaded
     room.prepareConnection(url, token);
     // Connect to the LiveKit room.
     room.connect(url, token)
     .then(() => {
       console.log('Connected to room:', room.name);
+      const tryPerformRpc = () => {
+        room.localParticipant.performRpc({
+          destinationIdentity: 'Android',
+          method: 'client-connected',
+          payload: 'WEB',
+        }).then(response => {
+          const available_cameras = JSON.parse(response);
+          buttons = new Buttons(this, available_cameras);
+          window.startLocationService(this);
+        }).catch(error => {
+          console.log("Trying to connect to robot: " + error);
+          setTimeout(tryPerformRpc, 10000); // Retry after 10 seconds
+        });
+      };
+
+      tryPerformRpc();
     })
     .catch((error) => {
       console.error('Error connecting to room:', error);
     });
+
   }
 
-  this.sendToBot = () => {
+  this.sendDriveCommand = (msg) => {
     if (msg === undefined || msg === null) {
       return
     }
 
+    msg = JSON.stringify({driveCmd: msg})
+    console.log(msg)
     // publish to topic
-  }
-
-  let buttons = null;
-
-  this.setupListeners = () => {
-    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      if (track.kind === Track.Kind.Video) {
-        let camera_metadata = participant.metadata
-        console.log(camera_metadata);
-        buttons = new Buttons(this, camera_metadata);
-
-        const streamElement = track.attach("video");
-        //document.getElementById("video").appendChild(streamElement);
-      }
+    room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'drive-cmd',
+      payload: msg,
+    }).then(response => {
+    }).catch(error => {
+        console.log("Error sending camera switch request: " + error );
     });
   }
+
+  this.sendCommand = (msg) => {
+    if (msg === undefined || msg === null) {
+      return
+    }
+
+    msg = JSON.stringify({command: msg})
+
+    // publish to topic
+    room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'cmd',
+      payload: msg,
+    }).then(response => {
+    }).catch(error => {
+        console.log("Error sending camera switch request: " + error );
+    });
+  }
+
+  this.switchCamera = (camera_id) => {
+    let payload = camera_id.toString();
+    room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'switch-camera',
+      payload: payload,
+    }).then(response => {
+    }).catch(error => {
+        console.log("Error sending camera switch request: " + error );
+    });
+  }
+
+  this.getLocation = (update) => {
+    room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'location',
+      payload: "",
+    }).then(response => {
+      let res_json = JSON.parse(response).status
+      let update_loc = {
+        lat: res_json.latitude,
+        lng: res_json.longitude
+      }
+      update(update_loc)
+    }).catch(error => {
+        console.log("Error sending location request: " + error );
+    });
+  }
+
+  
+
+  this.setupListeners = () => {
+    room.on(RoomEvent.TrackSubscribed, async (track, publication, participant) => {
+      if (track.kind === Track.Kind.Video) {
+        const videoElement = document.getElementById("video");
+        track.attach(videoElement);
+      }
+    });
+
+  }
+
 }

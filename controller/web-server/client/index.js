@@ -15,7 +15,10 @@ const connection = new LiveKitClient();
 
     // connect to room
     await connection.start()
-    const command = new Commands((cmd)=>connection.sendToBot(cmd))
+    const command = new Commands(
+        (cmd)=>connection.sendCommand(cmd), 
+        (cmd)=>connection.sendDriveCommand(cmd)
+    )
     const remoteKeyboard = new RemoteKeyboard(command.getCommandHandler())
     const onKeyPress = (key) => remoteKeyboard.processKey(key)
     const onGamePadInput = (gamepad) => remoteKeyboard.processGamepad(gamepad)

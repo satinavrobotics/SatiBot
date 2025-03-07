@@ -7,8 +7,8 @@
  * Date: Mon Nov 29 2021
  */
 
-export function Commands (sendToBot) {
-  const commandHandler = new CommandHandler(sendToBot)
+export function Commands (sendCommand, sendDriveCmd) {
+  const commandHandler = new CommandHandler(sendCommand, sendDriveCmd)
 
   this.getCommandHandler = () => {
     return commandHandler
@@ -46,17 +46,15 @@ function DriveValue () {
   }
 }
 
-export function CommandHandler (sendToBot) {
+export function CommandHandler (sendCommand, sendDriveCmd) {
   const left = new DriveValue()
   const right = new DriveValue()
   const commandReducer = new DriveCommandReducer()
 
-  this.sendCommand = (command) => {
-    sendToBot({ command: command })
-  }
+  this.sendCommand = (cmd) => sendCommand(cmd)
 
   const sendDriveCommand = (left, right) => {
-    commandReducer.send({ driveCmd: { l: left, r: right } }, sendToBot)
+    commandReducer.send({ l: left, r: right }, sendDriveCmd)
   }
 
    this.gamepadCommand = (left, right) => {
@@ -107,18 +105,18 @@ export function CommandHandler (sendToBot) {
 function DriveCommandReducer () {
   let lastCommand = null
 
-  this.send = (commandAsJson, sendToBot) => {
-    if (isEqual(commandAsJson, lastCommand)) {
+  this.send = (command, sendToBot) => {
+    if (isEqual(command, lastCommand)) {
       return
     }
-    lastCommand = commandAsJson
-    sendToBot(commandAsJson)
+    lastCommand = command
+    sendToBot(command)
   }
 
   const isEqual = (current, last) => {
     if (!last || !current) {
       return false
     }
-    return last.driveCmd.l === current.driveCmd.l && last.driveCmd.r === current.driveCmd.r
+    return last.l === current.l && last.r === current.r
   }
 }
