@@ -112,29 +112,46 @@ export function RemoteKeyboard (commandHandler) {
 
   this.processGamepad = (gamepad) => {
     if (!gamepad) return;
-    // check if empty
-    console.log(gamepad)
-
-    // Assuming gamepad.axes[0] is the left joystick horizontal axis
-    // gamepad.axes[2] is the right trigger, gamepad.axes[5] is the left trigger
-    const leftJoystickX = gamepad.axes[0];
+    
+    // Apply deadzone to joystick input
+    const applyDeadzone = (value, deadzone = 0.05) => {
+      return Math.abs(value) < deadzone ? 0 : value;
+    };
+    
+    // Get joystick and trigger values
+    const leftJoystickX = applyDeadzone(gamepad.axes[0]);
     const rightTrigger = gamepad.buttons[7].value; // Right trigger (RT)
     const leftTrigger = gamepad.buttons[6].value;  // Left trigger (LT)
-
+    
     // Calculate thrust based on trigger values
     const forwardThrust = rightTrigger; // RT for forward
     const backwardThrust = leftTrigger; // LT for backward
-
+    
+    // Net thrust (positive for forward, negative for backward)
+    const netThrust = forwardThrust - backwardThrust;
+    
     // Calculate steering based on left joystick horizontal axis
-    const steering = leftJoystickX;
-
-    // Calculate left and right drive values
-    const leftDrive = forwardThrust - backwardThrust + steering;
-    const rightDrive = forwardThrust - backwardThrust - steering;
-
-    //console.log(leftDrive, rightDrive);
-
-    // Send drive command using the command handler
-    commandHandler.gamepadCommand(leftDrive, rightDrive);
+    // Scale steering effect based on thrust for better control
+    const steeringFactor = Math.abs(netThrust) > 0.1 ? 0.5 : 1.0;
+    const steering = leftJoystickX * steeringFactor;
+    
+    // Calculate left and right drive values with proper clamping
+    let leftDrive = netThrust + steering;
+    let rightDrive = netThrust - steering;
+    
+    // Normalize values to ensure they stay within [-1, 1] range
+    const max = Math.max(1, Math.abs(leftDrive), Math.abs(rightDrive));
+    if (max > 1) {
+      leftDrive /= max;
+      rightDrive /= max;
+    }
+    
+    // Only send commands if there's actual input
+    if (Math.abs(leftDrive) > 0.01 || Math.abs(rightDrive) > 0.01) {
+      commandHandler.gamepadCommand(leftDrive, rightDrive);
+    } else {
+      // Send zero command to stop when no input
+      commandHandler.gamepadCommand(0, 0);
+    }
   };
 }
