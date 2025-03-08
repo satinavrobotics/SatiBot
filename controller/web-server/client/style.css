@@ -259,6 +259,98 @@ video::-webkit-media-controls-timeline {
 
 #command-container {
     transition: max-height 0.3s ease-out;
-    overflow: hidden;
+    overflow: auto;
+    max-height: 80vh;
+}
+
+/* Add styles for the buttons */
+#toggle-map, #toggle-missions, #toggle-controls {
+    background-color: #0071C5; /* Button background color */
+    color: white; /* Text color */
+    border: none; /* Remove border */
+    border-radius: 5px; /* Rounded corners */
+    padding: 10px 15px; /* Padding for better size */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s, transform 0.2s; /* Smooth transition */
+}
+
+#toggle-map:hover, #toggle-missions:hover, #toggle-controls:hover {
+    background-color: #005f99; /* Darker shade on hover */
+    transform: scale(1.05); /* Slightly enlarge on hover */
+}
+
+#command-list {
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+/* Styles for the mission panel */
+#mission-panel {
+    background-color: #f8f9fb; /* Light background for the panel */
+    border: 1px solid #0071C5; /* Border color */
+    border-radius: 10px; /* Rounded corners */
+    padding: 20px; /* Padding for spacing */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+}
+
+/* Style for the new mission button */
+#new-mission-btn {
+    background-color: #0071C5; /* Button background color */
+    color: white; /* Text color */
+    border: none; /* Remove border */
+    border-radius: 5px; /* Rounded corners */
+    padding: 10px 15px; /* Padding for better size */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s, transform 0.2s; /* Smooth transition */
+}
+
+#new-mission-btn:hover {
+    background-color: #005f99; /* Darker shade on hover */
+    transform: scale(1.05); /* Slightly enlarge on hover */
+}
+
+/* Style for mission list items */
+#mission-list li {
+    display: flex;
+    justify-content: space-between; /* Space between text and buttons */
+    align-items: center; /* Center items vertically */
+    margin: 10px 0; /* Margin for spacing */
+    padding: 10px; /* Padding for better size */
+    background-color: #ffffff; /* White background */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+}
+
+/* Style for mission buttons */
+#mission-list button {
+    background-color: #ff4d4d; /* Red for delete button */
+    color: white; /* Text color */
+    border: none; /* Remove border */
+    border-radius: 5px; /* Rounded corners */
+    padding: 5px 10px; /* Padding for better size */
+    cursor: pointer; /* Pointer cursor on hover */
+    transition: background-color 0.3s; /* Smooth transition */
+}
+
+#mission-list button:hover {
+    background-color: #cc0000; /* Darker red on hover */
+}
+
+/* Styles for the search input */
+#search-input {
+    width: 100%; /* Full width */
+    padding: 10px; /* Padding for better size */
+    border: 1px solid #0071C5; /* Border color */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    font-size: 16px; /* Font size */
+    margin-top: 10px; /* Margin for spacing */
+}
+
+/* Style for the search input on focus */
+#search-input:focus {
+    border-color: #005f99; /* Darker border on focus */
+    outline: none; /* Remove default outline */
+    box-shadow: 0 0 5px rgba(0, 97, 153, 0.5); /* Shadow effect on focus */
 }
 

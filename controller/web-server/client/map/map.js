@@ -139,7 +139,6 @@ export function initMap() {
     newMissionBtn.addEventListener("click", () => {
         isAddingMission = true;
         searchInput.style.display = 'block'; // Show the search box
-        alert("Click on the map to add a new mission or use the search box.");
     });
 
     map.addListener("click", (event) => {
