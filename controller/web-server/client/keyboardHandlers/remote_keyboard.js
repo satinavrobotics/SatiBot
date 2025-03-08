@@ -131,9 +131,10 @@ export function RemoteKeyboard (commandHandler) {
     const netThrust = forwardThrust - backwardThrust;
     
     // Calculate steering based on left joystick horizontal axis
-    // Scale steering effect based on thrust for better control
+    // Invert steering direction when going backwards for more intuitive control
+    const steeringDirection = netThrust >= 0 ? 1 : -1;
     const steeringFactor = Math.abs(netThrust) > 0.1 ? 0.5 : 1.0;
-    const steering = leftJoystickX * steeringFactor;
+    const steering = leftJoystickX * steeringFactor * steeringDirection;
     
     // Calculate left and right drive values with proper clamping
     let leftDrive = netThrust + steering;
