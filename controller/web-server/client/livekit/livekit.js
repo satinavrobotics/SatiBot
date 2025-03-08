@@ -129,6 +129,15 @@ export function LiveKitClient() {
     });
   }
 
+
+  this.switchFlashlight = () => {
+    return room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'switch-flashlight',
+      payload: "",
+    })
+  }
+
   this.getLocation = (update) => {
     room.localParticipant.performRpc({
       destinationIdentity: 'Android',

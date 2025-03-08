@@ -32,6 +32,40 @@ export function Buttons (connection, available_cameras) {
   const soundButton = document.getElementById('sound_button')
   soundButton.onclick = toggleSound
 
+  // FLASHLIGHT
+  /*
+  const toggleFlashlight = () => {
+
+    const flashlightButton = document.getElementById('flashlight_button')
+    flashlightButton.classList.add('button-disabled')
+    console.log("Flashlight button toggled")
+
+    // Call the switchFlashlight method from LiveKitClient
+    connection.switchFlashlight()
+      .then(response => {
+        const result = JSON.parse(response)
+        console.log(result) 
+        // Handle the result from the switchFlashlight method
+        if (result) {
+          // Update button icon based on flashlight state
+          flashlightButton.src = result.state ? 'icons/flashlight_on.png' : 'icons/flashlight_off.png'
+        } else {
+          console.error('Failed to toggle flashlight')
+        }
+      })
+      .catch(error => {
+        console.error('Flashlight toggle failed:', error)
+      })
+      .finally(() => {
+        flashlightButton.classList.remove('button-disabled')
+      })
+  }
+  
+  const flashlightButton = document.getElementById('flashlight_button')
+  if (flashlightButton) {
+    flashlightButton.onclick = toggleFlashlight
+  }
+    */
 
   // CAMERAS
   const mainCameraButton = document.getElementById('camera_switch_main')
