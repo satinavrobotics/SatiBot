@@ -54,7 +54,8 @@ export function CommandHandler (sendCommand, sendDriveCmd) {
   this.sendCommand = (cmd) => sendCommand(cmd)
 
   const sendDriveCommand = (left, right) => {
-    commandReducer.send({ l: left, r: right }, sendDriveCmd)
+    //commandReducer.send({ l: left, r: right }, sendDriveCmd)
+    sendDriveCmd({ l: left, r: right })
   }
 
    this.gamepadCommand = (left, right) => {
