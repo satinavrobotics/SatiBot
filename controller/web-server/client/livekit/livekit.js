@@ -162,6 +162,7 @@ export function LiveKitClient() {
       if (track.kind === Track.Kind.Video) {
         const videoElement = document.getElementById("video");
         track.attach(videoElement);
+        console.log("found video track")
       }
     });
 
