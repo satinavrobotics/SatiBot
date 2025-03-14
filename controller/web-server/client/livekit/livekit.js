@@ -18,7 +18,7 @@ export function LiveKitClient() {
   }
 
   this.start = () => {
-    let url = localStorage.getItem('livekit_url');
+    let url = null //localStorage.getItem('livekit_url');
     let token = localStorage.getItem('livekit_token');
     let expiration = localStorage.getItem('livekit_expiration');
 
