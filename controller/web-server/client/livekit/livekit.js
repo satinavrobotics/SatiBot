@@ -26,7 +26,7 @@ export function LiveKitClient() {
       const signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))
       const userEmail = signedInUser.email;
       console.log("calling /api/createToken")
-      axios.post('/api/createToken', { roomName: userEmail, participantName: "Web" })
+      axios.post('/api/createToken', { roomName: userEmail, participantName: `WEB-${require('os').hostname()}`})
         .then(response => {
           url = response.data.server_url;
           token = response.data.token;
@@ -62,7 +62,7 @@ export function LiveKitClient() {
         room.localParticipant.performRpc({
           destinationIdentity: 'Android',
           method: 'client-connected',
-          payload: 'WEB',
+          payload:`WEB-${require('os').hostname()}`,
         }).then(response => {
           const available_cameras = JSON.parse(response);
           buttons = new Buttons(this, available_cameras);
