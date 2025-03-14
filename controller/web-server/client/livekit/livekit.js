@@ -26,7 +26,8 @@ export function LiveKitClient() {
       const signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))
       const userEmail = signedInUser.email;
       console.log("calling /api/createToken")
-      axios.post('/api/createToken', { roomName: userEmail, participantName: `WEB-${require('os').hostname()}`})
+      const uniqueID = `WEB-${Math.random().toString(36).substring(2, 10)}`;
+      axios.post('/api/createToken', { roomName: userEmail, participantName: uniqueID})
         .then(response => {
           url = response.data.server_url;
           token = response.data.token;
