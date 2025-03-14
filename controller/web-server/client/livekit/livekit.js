@@ -63,7 +63,7 @@ export function LiveKitClient() {
         room.localParticipant.performRpc({
           destinationIdentity: 'Android',
           method: 'client-connected',
-          payload:`WEB-${require('os').hostname()}`,
+          payload:`WEB`,
         }).then(response => {
           const available_cameras = JSON.parse(response);
           buttons = new Buttons(this, available_cameras);
