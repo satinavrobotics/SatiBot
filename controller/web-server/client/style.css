@@ -286,11 +286,13 @@ video::-webkit-media-controls-timeline {
 
 /* Styles for the mission panel */
 #mission-panel {
-    background-color: #f8f9fb; /* Light background for the panel */
-    border: 1px solid #0071C5; /* Border color */
-    border-radius: 10px; /* Rounded corners */
+    width: 400px; /* Match the map's width */
+    height: 100%; /* Match the map's height */
+    background-color: #333; /* Dark background for the panel */
+    border: 1px solid #444; /* Darker border color */
     padding: 20px; /* Padding for spacing */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); /* Subtle shadow */
+    color: #fff; /* White text color */
 }
 
 /* Style for the new mission button */
@@ -310,15 +312,26 @@ video::-webkit-media-controls-timeline {
 }
 
 /* Style for mission list items */
+#mission-list {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Center items horizontally */
+    padding: 0; /* Remove default padding */
+    margin: 0; /* Remove default margin */
+    list-style-type: none; /* Remove bullet points */
+}
+
 #mission-list li {
     display: flex;
     justify-content: space-between; /* Space between text and buttons */
     align-items: center; /* Center items vertically */
+    width: 90%; /* Set width to 90% of the parent to allow centering */
     margin: 10px 0; /* Margin for spacing */
     padding: 10px; /* Padding for better size */
-    background-color: #ffffff; /* White background */
+    background-color: #444; /* Darker background */
     border-radius: 5px; /* Rounded corners */
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5); /* Subtle shadow */
+    color: #fff; /* White text color */
 }
 
 /* Style for mission buttons */
@@ -336,15 +349,26 @@ video::-webkit-media-controls-timeline {
     background-color: #cc0000; /* Darker red on hover */
 }
 
+#mission-list button.go-button {
+    background-color: #0071C5; /* Blue for go button */
+}
+
+#mission-list button.go-button:hover {
+    background-color: #005f99; /* Darker blue on hover */
+}
+
 /* Styles for the search input */
 #search-input {
-    width: 100%; /* Full width */
+    width: 90%; /* Full width */
     padding: 10px; /* Padding for better size */
-    border: 1px solid #0071C5; /* Border color */
+    border: 1px solid #555; /* Darker border color */
     border-radius: 5px; /* Rounded corners */
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5); /* Subtle shadow */
     font-size: 16px; /* Font size */
     margin-top: 10px; /* Margin for spacing */
+    margin-bottom: 10px; /* Add space below the input */
+    background-color: #444; /* Darker background */
+    color: #fff; /* White text color */
 }
 
 /* Style for the search input on focus */
@@ -354,3 +378,27 @@ video::-webkit-media-controls-timeline {
     box-shadow: 0 0 5px rgba(0, 97, 153, 0.5); /* Shadow effect on focus */
 }
 
+#suggestions-container {
+    display: none; /* Initially hidden */
+    width: 250px; /* Fixed width */
+    max-height: 200px; /* Fixed height */
+    overflow-y: auto; /* Enable vertical scrolling if content overflows */
+    background: #444; /* Darker background */
+    padding: 10px;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    margin: 10px;
+    position: absolute; /* Position it absolutely for better control */
+    z-index: 1000; /* Ensure it appears above other elements */
+    color: #fff; /* White text color */
+}
+
+#suggestions-container div:hover {
+    background-color: #f0f0f0; /* Light gray background on hover */
+    cursor: pointer; /* Change cursor to pointer */
+}
+
+#map {
+    width: 400px; 
+    height: 1000px;
+}

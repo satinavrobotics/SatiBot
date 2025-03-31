@@ -13,9 +13,11 @@
     <script src="keyboardHandlers/buttons.js" type="module"></script>
     <script src="keyboardHandlers/gamepad.js" type="module"></script>
     <script src="firebase/APIs.js" type="module"></script>
-    <script src="map/map.js" type="module"></script>
+    
     <script src="https://accounts.google.com/gsi/client" async defer></script>
+   
     <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC_HHDxrjYbysJLtwlYVaLFK8zBzw5kZAo&libraries=places"></script>
+    <script src="map/map.js" type="module"></script>
 </head>
 
 <body style="background-color: #111111;">
@@ -58,6 +60,7 @@
                 <img id="camera_switch_wide" class="button" src="icons/wide_camera.png" width="30"/>
                 <img id="camera_switch_telephoto" class="button" src="icons/telephoto_camera.png" width="30"/>
                 <img id="camera_switch_front" class="button" src="icons/cameraswitch_black_24dp.svg" width="30"/>
+                <img id="camera_switch_ar" class="button" src="icons/ar_icon.png" width="30"/>
                 <img id="fullscreen" class="button" src="icons/fullscreen_black_24dp.svg" width="30"/>
             </div>
         </div>
@@ -78,13 +81,14 @@
 
         <!-- Command Sidebar -->
         <div id="mission-panel" style="display: none;">
-            <h3 style="margin-bottom: 15px; color: #333;">Missions</h3>
+            <h3 style="margin-bottom: 15px; color: #ffffff;">Missions</h3>
+            <input id="search-input" type="text" placeholder="Search for places" style="display: none;">
+            <div id="suggestions-container"></div>
             <button id="new-mission-btn">New Mission</button>
             <ul id="mission-list"></ul>
-            <input id="search-input" type="text" placeholder="Search for places" style="display: none;">
         </div>
         <div id="map-panel" style="display: none;">
-            <div id="map" style="width: 400px; height: 1000px;"></div>
+            <div id="map"></div>
         </div>
         <div id="command-container" style="display: none;">
             <ul id="command-list"

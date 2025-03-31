@@ -72,6 +72,9 @@ export function Buttons (connection, available_cameras) {
   const wideCameraButton = document.getElementById('camera_switch_wide')
   const telephotoCameraButton = document.getElementById('camera_switch_telephoto')
   const frontCameraButton = document.getElementById('camera_switch_front')
+  const arCameraButton = document.getElementById('camera_switch_ar')
+
+  arCameraButton.onclick = () => connection.switchCamera("AR_CORE")
 
   if (available_cameras.hasOwnProperty("main")) {
     mainCameraButton.onclick = () => connection.switchCamera(available_cameras.main)

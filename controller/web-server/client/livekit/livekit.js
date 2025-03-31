@@ -139,21 +139,18 @@ export function LiveKitClient() {
     })
   }
 
-  this.getLocation = (update) => {
-    room.localParticipant.performRpc({
+  this.getLocation = async () => {
+    const response = await room.localParticipant.performRpc({
       destinationIdentity: 'Android',
       method: 'location',
       payload: "",
-    }).then(response => {
-      let res_json = JSON.parse(response).status
-      let update_loc = {
-        lat: res_json.latitude,
-        lng: res_json.longitude
-      }
-      update(update_loc)
-    }).catch(error => {
-        console.log("Error sending location request: " + error );
-    });
+    })
+    let res_json = JSON.parse(response).status
+    let update_loc = {
+      lat: res_json.latitude,
+      lng: res_json.longitude
+    }
+    return update_loc;
   }
 
   

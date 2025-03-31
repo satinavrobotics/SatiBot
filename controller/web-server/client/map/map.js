@@ -1,189 +1,237 @@
-export function initMap() {
-    const mapContainer = document.getElementById("map");
-    const mapStyle = [
-        {
-            "elementType": "geometry",
-            "stylers": [
-                {
-                    "color": "#212121"
-                }
-            ]
-        },
-        {
-            "elementType": "labels.icon",
-            "stylers": [
-                {
-                    "visibility": "off"
-                }
-            ]
-        },
-        {
-            "elementType": "labels.text.fill",
-            "stylers": [
-                {
-                    "color": "#757575"
-                }
-            ]
-        },
-        {
-            "elementType": "labels.text.stroke",
-            "stylers": [
-                {
-                    "color": "#212121"
-                }
-            ]
-        },
-        {
-            "featureType": "administrative",
-            "elementType": "geometry",
-            "stylers": [
-                {
-                    "color": "#757575"
-                }
-            ]
-        },
-        {
-            "featureType": "administrative.country",
-            "elementType": "labels.text.fill",
-            "stylers": [
-                {
-                    "color": "#9e9e9e"
-                }
-            ]
-        },
-        {
-            "featureType": "administrative.locality",
-            "elementType": "labels.text.fill",
-            "stylers": [
-                {
-                    "color": "#bdbdbd"
-                }
-            ]
-        },
-        {
-            "featureType": "poi",
-            "elementType": "labels.text.fill",
-            "stylers": [
-                {
-                    "color": "#757575"
-                }
-            ]
-        },
-        {
-            "featureType": "road",
-            "elementType": "geometry",
-            "stylers": [
-                {
-                    "color": "#424242"
-                }
-            ]
-        },
-        {
-            "featureType": "water",
-            "elementType": "geometry",
-            "stylers": [
-                {
-                    "color": "#000000"
-                }
-            ]
+export class MapController {
+    constructor() {
+        this.mapContainer = document.getElementById("map");
+        this.mapStyle = this.getMapStyle();
+        this.map = this.initMap();
+        this.directionsService = new google.maps.DirectionsService();
+        this.directionsRenderer = this.initDirectionsRenderer();
+        this.robotMarker = null;
+        this.robotPosition = null;
+        this.missionList = document.getElementById("mission-list");
+        this.newMissionBtn = document.getElementById("new-mission-btn");
+        this.searchInput = document.getElementById("search-input");
+        this.isAddingMission = false;
+        this.setupEventListeners();
+        this.initAutocomplete();
+        window.startLocationService = (connection) => {
+            setInterval(async () => {
+                const results = await connection.getLocation();
+                this.updateRobotPosition(results);
+            }, 1000);
         }
-    ];
+    }
 
-    const map = new google.maps.Map(mapContainer, {
-        center: { lat: 47.4636, lng: 19.0402 }, // Default center (Budapest District XI)
-        zoom: 15,
-        styles: mapStyle // Apply the dark style
-    });
+    getMapStyle() {
+        return [
+            {
+                "elementType": "geometry",
+                "stylers": [
+                    {
+                        "color": "#212121"
+                    }
+                ]
+            },
+            {
+                "elementType": "labels.icon",
+                "stylers": [
+                    {
+                        "visibility": "off"
+                    }
+                ]
+            },
+            {
+                "elementType": "labels.text.fill",
+                "stylers": [
+                    {
+                        "color": "#757575"
+                    }
+                ]
+            },
+            {
+                "elementType": "labels.text.stroke",
+                "stylers": [
+                    {
+                        "color": "#212121"
+                    }
+                ]
+            },
+            {
+                "featureType": "administrative",
+                "elementType": "geometry",
+                "stylers": [
+                    {
+                        "color": "#757575"
+                    }
+                ]
+            },
+            {
+                "featureType": "administrative.country",
+                "elementType": "labels.text.fill",
+                "stylers": [
+                    {
+                        "color": "#9e9e9e"
+                    }
+                ]
+            },
+            {
+                "featureType": "administrative.locality",
+                "elementType": "labels.text.fill",
+                "stylers": [
+                    {
+                        "color": "#bdbdbd"
+                    }
+                ]
+            },
+            {
+                "featureType": "poi",
+                "elementType": "labels.text.fill",
+                "stylers": [
+                    {
+                        "color": "#757575"
+                    }
+                ]
+            },
+            {
+                "featureType": "road",
+                "elementType": "geometry",
+                "stylers": [
+                    {
+                        "color": "#424242"
+                    }
+                ]
+            },
+            {
+                "featureType": "water",
+                "elementType": "geometry",
+                "stylers": [
+                    {
+                        "color": "#000000"
+                    }
+                ]
+            }
+        ];
+    }
 
-    // Setup the Directions API components
-    const directionsService = new google.maps.DirectionsService();
-    const directionsRenderer = new google.maps.DirectionsRenderer({
-        polylineOptions: { strokeColor: '#FF0000' } // Red route line
-    });
-    directionsRenderer.setMap(map);
+    initMap() {
+        return new google.maps.Map(this.mapContainer, {
+            center: { lat: 47.4636, lng: 19.0402 }, // Default center (Budapest District XI)
+            zoom: 15,
+            styles: this.mapStyle // Apply the dark style
+        });
+    }
 
+    initDirectionsRenderer() {
+        const renderer = new google.maps.DirectionsRenderer({
+            polylineOptions: { strokeColor: '#FF0000' } // Red route line
+        });
+        renderer.setMap(this.map);
+        return renderer;
+    }
 
-    let robotMarker = null;
-    let robotPosition = null;
-    // Function to update the robot's position
-    const updateRobotPosition = (newPosition) => {
-        if (robotMarker) {
-            robotMarker.setPosition(newPosition);
-            // set the map center to the robot's position
-            map.setCenter(newPosition);
+    async initAutocomplete() {
+        // Request the necessary libraries.
+        const { AutocompleteSessionToken, AutocompleteSuggestion } =
+            await google.maps.importLibrary("places");
+
+        // Create a session token.
+        this.sessionToken = new AutocompleteSessionToken();
+
+        // Add event listener to the search input.
+        this.searchInput.addEventListener("input", async (event) => {
+            const input = event.target.value;
+            if (!input) return;
+
+            // Fetch autocomplete suggestions.
+            const request = {
+                input: input,
+                locationBias: new google.maps.LatLng(47.4979, 19.0402), // Coordinates of Budapest city center
+                includedPrimaryTypes: ["restaurant"], // Restrict results to restaurants
+                language: "hu-HU",
+                region: "HU", // Region code for Hungary
+                sessionToken: this.sessionToken,
+              };
+
+            const { suggestions } =
+                await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+
+            // Display suggestions in a dropdown.
+            this.displaySuggestions(suggestions);
+        });
+    }
+
+    displaySuggestions(suggestions) {
+        const suggestionsContainer = document.getElementById("suggestions-container");
+        suggestionsContainer.innerHTML = ""; // Clear previous suggestions.
+
+        if (suggestions.length > 0) {
+            suggestionsContainer.style.display = 'block'; // Show the suggestions container
         } else {
-            robotMarker = new google.maps.Marker({
+            suggestionsContainer.style.display = 'none'; // Hide if no suggestions
+        }
+
+        suggestions.forEach((suggestion) => {
+            const suggestionElement = document.createElement("div");
+            suggestionElement.textContent = suggestion.placePrediction.text.toString();
+            suggestionElement.addEventListener("click", async () => {
+                const place = suggestion.placePrediction.toPlace();
+                await place.fetchFields({
+                    fields: ["displayName", "formattedAddress", "location"],
+                });
+
+                // Add the selected place as a mission.
+                this.addMission(place.location);
+                this.isAddingMission = false;
+                this.searchInput.style.display = 'none'; // Hide the search box
+                suggestionsContainer.style.display = 'none'; // Hide suggestions container
+            });
+
+            suggestionsContainer.appendChild(suggestionElement);
+        });
+    }
+
+    setupEventListeners() {
+        this.newMissionBtn.addEventListener("click", () => {
+            this.isAddingMission = true;
+            this.searchInput.style.display = 'block'; // Show the search box
+        });
+
+        this.map.addListener("click", (event) => {
+            if (this.isAddingMission) {
+                this.addMission(event.latLng);
+                this.isAddingMission = false;
+                this.searchInput.style.display = 'none'; // Hide the search box
+            }
+        });
+    }
+
+    updateRobotPosition(newPosition) {
+        if (this.robotMarker) {
+            this.robotMarker.setPosition(newPosition);
+            this.map.setCenter(newPosition);
+        } else {
+            this.robotMarker = new google.maps.Marker({
                 position: newPosition,
-                map: map,
+                map: this.map,
                 title: "Robot's Current Position",
                 icon: 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png'
             });
         }
-        robotPosition = newPosition;
+        this.robotPosition = newPosition;
     }
 
-
-    window.startLocationService = (connection) => {
-        setInterval(() => {
-            connection.getLocation(updateRobotPosition);
-        }, 1000);
-    }
-
-    const missionList = document.getElementById("mission-list");
-    const newMissionBtn = document.getElementById("new-mission-btn");
-    const searchBox = new google.maps.places.SearchBox(document.getElementById("search-input"));
-    const searchInput = document.getElementById("search-input");
-
-    let isAddingMission = false;
-
-    newMissionBtn.addEventListener("click", () => {
-        isAddingMission = true;
-        searchInput.style.display = 'block'; // Show the search box
-    });
-
-    map.addListener("click", (event) => {
-        if (isAddingMission) {
-            addMission(event.latLng);
-            isAddingMission = false;
-            searchInput.style.display = 'none'; // Hide the search box
-        }
-    });
-
-    // Bias the SearchBox results towards the current map's viewport.
-    map.addListener("bounds_changed", () => {
-        searchBox.setBounds(map.getBounds());
-    });
-
-    searchBox.addListener("places_changed", () => {
-        if (!isAddingMission) return;
-
-        const places = searchBox.getPlaces();
-        if (places.length === 0) return;
-
-        const place = places[0];
-        if (!place.geometry || !place.geometry.location) {
-            console.log("Returned place contains no geometry");
-            return;
-        }
-
-        addMission(place.geometry.location);
-        isAddingMission = false;
-        searchInput.style.display = 'none'; // Hide the search box
-    });
-
-    function addMission(location) {
-        // Create marker for the mission location.
+    addMission(location) {
         const marker = new google.maps.Marker({
             position: location,
-            map: map,
+            map: this.map,
             title: "Mission",
         });
 
-        // Create a list item for the mission.
         const missionItem = document.createElement("li");
         missionItem.textContent = `Mission at (${location.lat().toFixed(2)}, ${location.lng().toFixed(2)}) `;
+        
+        // Set the width of the mission item
+        missionItem.style.width = '100%'; // Adjust the width as needed
 
-        // Create Delete Button.
         const deleteButton = document.createElement("button");
         deleteButton.textContent = "X";
         deleteButton.onclick = () => {
@@ -191,53 +239,53 @@ export function initMap() {
             marker.setMap(null);
         };
 
-        // Create Go Button.
         const goButton = document.createElement("button");
         goButton.textContent = "Go";
+        goButton.classList.add("go-button");
         goButton.onclick = () => {
-            if (!robotPosition) {
+            if (!this.robotPosition) {
                 alert("Please set the robot's position first.");
                 return;
             }
-            // Query the directions API from the robot's current position to the mission location.
-            directionsService.route({
-                origin: robotPosition,
+            this.directionsService.route({
+                origin: this.robotPosition,
                 destination: location,
                 travelMode: google.maps.TravelMode.WALKING,
             }, (response, status) => {
                 if (status === 'OK') {
-                    directionsRenderer.setDirections(response);
-
-                    // Place markers for each step in the route.
-                    const steps = response.routes[0].legs[0].steps;
-                    steps.forEach(step => {
-                        new google.maps.Marker({
-                            position: step.start_location,
-                            map: map,
-                            icon: {
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 5,
-                                fillColor: '#FFFF00', // Yellow color
-                                fillOpacity: 1,
-                                strokeWeight: 0
-                            },
-                            title: "Step Marker"
-                        });
-                    });
+                    this.directionsRenderer.setDirections(response);
+                    this.addStepMarkers(response);
                 } else {
                     alert('Directions request failed due to ' + status);
                 }
             });
         };
 
-        // Append buttons to the mission item.
         missionItem.appendChild(deleteButton);
         missionItem.appendChild(goButton);
-        missionList.appendChild(missionItem);
+        this.missionList.appendChild(missionItem);
+    }
+
+    addStepMarkers(response) {
+        const steps = response.routes[0].legs[0].steps;
+        steps.forEach(step => {
+            new google.maps.Marker({
+                position: step.start_location,
+                map: this.map,
+                icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 5,
+                    fillColor: '#FFFF00', // Yellow color
+                    fillOpacity: 1,
+                    strokeWeight: 0
+                },
+                title: "Step Marker"
+            });
+        });
     }
 }
 
-window.onload = () => {
-    const map = new initMap();
+document.addEventListener("DOMContentLoaded", () => {
+    const mapController = new MapController();
     console.log("Map loaded");
-};
+});
