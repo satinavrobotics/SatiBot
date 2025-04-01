@@ -286,6 +286,6 @@ export class MapController {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    const mapController = new MapController();
-    console.log("Map loaded");
+    //const mapController = new MapController();
+    //console.log("Map loaded");
 });
