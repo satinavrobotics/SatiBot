@@ -203,6 +203,7 @@ function getMapStyle() {
 function Commutes(configuration) {
   let commutesMap;
   let robotPosition;
+  let robotMarker;
   let activeDestinationIndex;
   let origin = configuration.mapOptions.center;
   let destinations = configuration.destination || [];
@@ -896,11 +897,11 @@ function Commutes(configuration) {
   }
 
   function updateRobotPosition(newPosition) {
-    if (this.robotMarker) {
-        this.robotMarker.setPosition(newPosition);
+    if (robotMarker) {
+        robotMarker.setPosition(newPosition);
         this.map.setCenter(newPosition);
     } else {
-        this.robotMarker = new google.maps.Marker({
+        robotMarker = new google.maps.Marker({
             position: newPosition,
             map: commutesMap,
             title: "Robot's Current Position",
