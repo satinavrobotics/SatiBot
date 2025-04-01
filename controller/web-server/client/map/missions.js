@@ -899,7 +899,6 @@ function Commutes(configuration) {
   function updateRobotPosition(newPosition) {
     if (robotMarker) {
         robotMarker.setPosition(newPosition);
-        this.map.setCenter(newPosition);
     } else {
         robotMarker = new google.maps.Marker({
             position: newPosition,
