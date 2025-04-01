@@ -700,7 +700,7 @@ function Commutes(configuration) {
    */
   function getDirections(destination) {
     const request = {
-      origin: origin,
+      origin: robotPosition,
       destination: {'placeId': destination.place_id},
       travelMode: destination.travelModeEnum,
       unitSystem: configuration.distanceMeasurementType === 'METRIC' ?
@@ -905,7 +905,7 @@ function Commutes(configuration) {
             map: commutesMap,
             title: "Robot's Current Position",
             label: {
-                text: "SatiBot",
+                text: '●' ,
                 fontFamily: 'Arial, sans-serif',
                 color: {
                     fill: "#4285F4",
