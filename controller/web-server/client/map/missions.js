@@ -725,33 +725,66 @@ function Commutes(configuration) {
     const distance = directionLeg.distance.text;
     const duration = convertDurationValueAsString(directionLeg.duration.value);
 
-    const innerStroke = new google.maps.Polyline({
-      path: path,
-      strokeColor: STROKE_COLORS.inactive.innerStroke,
-      strokeOpacity: 1.0,
-      strokeWeight: 3,
-      zIndex: 10
-    });
-
-    const outerStroke = new google.maps.Polyline({
-      path: path,
-      strokeColor: STROKE_COLORS.inactive.outerStroke,
-      strokeOpacity: 1.0,
-      strokeWeight: 6,
-      zIndex: 1
-    });
 
     const marker = createMarker(destinationLocation, destination.label);
 
+    const markers = path.map((location, index) => {
+        const isTurn = index > 0 && index < path.length - 1 && isTurnPoint(path[index - 1], location, path[index + 1]);
+        return createWaypointMarker(location, undefined, isTurn);
+    });
+    
+    const innerStroke = new google.maps.Polyline({
+        path: path,
+        strokeColor: STROKE_COLORS.inactive.innerStroke,
+        strokeOpacity: 0.0,
+        strokeWeight: 3,
+        zIndex: 10
+    });
+
+    const outerStroke = new google.maps.Polyline({
+        path: path,
+        strokeColor: STROKE_COLORS.inactive.outerStroke,
+        strokeOpacity: 0.0,
+        strokeWeight: 6,
+        zIndex: 1
+    });
+  
     innerStroke.setMap(commutesMap);
     outerStroke.setMap(commutesMap);
-
+  
     destination.distance = distance;
     destination.duration = duration;
     destination.marker = marker;
+    destination.markers = markers;
     destination.polylines = {innerStroke, outerStroke};
     destination.bounds = bounds;
   }
+
+  // Helper function to determine if a point is a turn
+function isTurnPoint(prev, current, next) {
+    const angle = google.maps.geometry.spherical.computeHeading(prev, current) - google.maps.geometry.spherical.computeHeading(current, next);
+    return Math.abs(angle) > 30; // Consider it a turn if the angle is greater than 30 degrees
+}
+
+function createWaypointMarker(location, label, isTurn = false) {
+    const markerIconConfig = {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 5,
+        fillColor: '#4285F4', // Blue fill
+        fillOpacity: 1,
+        strokeWeight: isTurn ? 2 : 0, // Yellow border for turns
+        strokeColor: isTurn ? '#FFD700' : '#4285F4' // Yellow for turns, blue for normal
+    };
+
+    const mapOptions = {
+        position: location,
+        map: commutesMap,
+        icon: markerIconConfig,
+    };
+
+    const marker = new google.maps.Marker(mapOptions);
+    return marker;
+}
 
   /**
    * Assigns event target listeners to map objects of corresponding destination
@@ -770,21 +803,27 @@ function Commutes(configuration) {
     google.maps.event.addListener(destination.marker, 'mouseout', () => {
       changeMapObjectStrokeWeight(destination, false);
     });
-    for (const strokeLine in destination.polylines) {
-      google.maps.event.clearListeners(destination.polylines[strokeLine], 'click');
-      google.maps.event.clearListeners(destination.polylines[strokeLine], 'mouseover');
+    destination.markers.forEach(marker => {
+        google.maps.event.clearListeners(marker, 'click');
+        google.maps.event.clearListeners(marker, 'mouseover');
+        google.maps.event.clearListeners(marker, 'mouseout');
 
-      google.maps.event.addListener(destination.polylines[strokeLine], 'click', () => {
-        handleRouteClick(destination, destinationIdx);
-        destinationPanelEl.list.querySelectorAll('.destination')[destinationIdx].focus();
-      });
-      google.maps.event.addListener(destination.polylines[strokeLine], 'mouseover', () => {
-        changeMapObjectStrokeWeight(destination, true);
-      });
-      google.maps.event.addListener(destination.polylines[strokeLine], 'mouseout', () => {
-        changeMapObjectStrokeWeight(destination, false);
-      });
-    }
+        // Add click listener to handle route click
+        google.maps.event.addListener(marker, 'click', () => {
+            handleRouteClick(destination, destinationIdx);
+            destinationPanelEl.list.querySelectorAll('.destination')[destinationIdx].focus();
+        });
+
+        // Add mouseover listener to change marker appearance
+        google.maps.event.addListener(marker, 'mouseover', () => {
+            changeMapObjectStrokeWeight(destination, true);
+        });
+
+        // Add mouseout listener to revert marker appearance
+        google.maps.event.addListener(marker, 'mouseout', () => {
+            changeMapObjectStrokeWeight(destination, false);
+        });
+    });
   }
 
   /**
