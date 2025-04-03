@@ -6,9 +6,11 @@ import {auth, googleSigIn, googleSignOut} from './firebase/authentication'
 import {localStorageKeys} from './utils/constants'
 import {Gamepad } from './keyboardHandlers/gamepad.js'
 import {LiveKitClient} from './livekit/livekit.js'
+import {Recorder} from './map/recording.js'
 
 
 const connection = new LiveKitClient();
+const recorder = new Recorder();
 (async () => {
     const keyboard = new Keyboard()
     const gamepad = new Gamepad()
@@ -25,6 +27,7 @@ const connection = new LiveKitClient();
 
     keyboard.start(onKeyPress, () => connection.stop())
     gamepad.start(onGamePadInput)
+    recorder.init(command.getCommandHandler())
 })()
 
 export let signedInUser = JSON.parse(localStorage.getItem(localStorageKeys.user))
@@ -37,6 +40,7 @@ cancelButton.addEventListener('click', handleCancelButtonClick)
 okButton.addEventListener('click', handleOkButtonClick)
 const subscribeButton = document.getElementById('subscribe-button')
 subscribeButton.addEventListener('click', handleSubscription)
+
 
 
 /**
@@ -53,6 +57,9 @@ function handleSignInButtonClick() {
                 localStorage.setItem(localStorageKeys.user, JSON.stringify(user))
                 localStorage.setItem(localStorageKeys.isSignIn, true.toString())
                 sendId()
+
+                // Fetch Google Drive folders after signing in
+                recorder.fetchDriveFolders(); // Fetch folders
             })
             .catch((error) => {
                 // Handle any errors that might occur during sign-in
@@ -228,6 +235,8 @@ function handleAuthChangedOnRefresh() {
                     localStorage.setItem(localStorageKeys.user, JSON.stringify(res))
                     localStorage.setItem(localStorageKeys.isSignIn, 'true')
                     sendId()
+
+                    recorder.fetchDriveFolders()
                 }
             })
         }, 1000)
@@ -263,3 +272,4 @@ export function restrictUserOnExpiration() {
         }
     }
 }
+

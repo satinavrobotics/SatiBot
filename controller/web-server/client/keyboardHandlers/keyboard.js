@@ -16,13 +16,12 @@ export function Keyboard () {
     { keypressCode: 'd', key: 'D', description: 'Turn right' },
     { keypressCode: 'q', key: 'Q', description: 'Speed down' },
     { keypressCode: 'e', key: 'E', description: 'Speed up' },
-    { keypressCode: 'm', key: 'M', description: 'Drive mode' },
-    { keypressCode: 'n', key: 'N', description: 'Toggle noise' },
+    { keypressCode: 'm', key: 'M', description: 'Drive mode'},
     { keypressCode: 'ArrowLeft', key: '<img src="/icons/arrow.svg" style="transform: rotate(90deg)" />', description: 'Left indicator' },
     { keypressCode: 'ArrowRight', key: '<img src="/icons/arrow.svg" style="transform: rotate(-90deg)" />', description: 'Right indicator' },
     { keypressCode: 'ArrowUp', key: '<img src="/icons/arrow.svg" style="transform: rotate(180deg)" />', description: 'Cancel indicators' },
     { keypressCode: 'ArrowDown', key: '<img src="/icons/arrow.svg" style="transform: rotate(0deg)" />', description: 'Network mode' },
-    { keypressCode: ' ', key: '<div class="space-symbol"></div>', description: 'Toggle logging' },
+    //{ keypressCode: ' ', key: '<div class="space-symbol"></div>', description: 'Toggle logging' },
     { keypressCode: 'Escape', key: 'Esc', description: 'Quit' }
   ]
 
@@ -46,6 +45,8 @@ export function Keyboard () {
   const createMenuList = () => {
     const listItems = menuTable.map(item => {
       const liItem = document.createElement('li')
+      liItem.style.backgroundColor = '#333'; // Dark background for list items
+      liItem.style.color = 'white'; // White text color
 
       const keySymbol = document.createElement('div')
       keySymbol.innerHTML = item.key

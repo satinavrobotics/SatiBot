@@ -402,3 +402,23 @@ video::-webkit-media-controls-timeline {
     width: 400px; 
     height: 1000px;
 }
+
+/* Styles for the command list */
+#command-list {
+    background-color: #222; /* Darker background for the command list */
+    color: white; /* White text color for better contrast */
+}
+
+/* Styles for command list items */
+#command-list li {
+    background-color: #333; /* Darker background for list items */
+    color: white; /* White text color */
+    border-radius: 5px; /* Rounded corners */
+    padding: 10px; /* Padding for better size */
+    margin: 5px 0; /* Margin for spacing */
+}
+
+/* Hover effect for command list items */
+#command-list li:hover {
+    background-color: #444; /* Slightly lighter on hover */
+}
