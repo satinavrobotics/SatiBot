@@ -60,14 +60,23 @@ export function LiveKitClient() {
     .then(() => {
       console.log('Connected to room:', room.name);
       const tryPerformRpc = () => {
+        const payload_json = {"command": "CONNECTED"};
+        const payload = JSON.stringify(payload_json);
         room.localParticipant.performRpc({
           destinationIdentity: 'Android',
           method: 'client-connected',
-          payload:`WEB`,
+          payload: payload,
         }).then(response => {
           const available_cameras = JSON.parse(response);
           buttons = new Buttons(this, available_cameras);
-          window.startLocationService(this);
+          setInterval(async () => {
+                const results = await this.getVehicleStatus();
+                for (const callback of Object.values(window.locationCallbacks)) {
+                  if (typeof callback === 'function') {
+                      callback(results);
+                  }
+              }
+            }, 1000);
         }).catch(error => {
           console.log("Trying to connect to robot: " + error);
           setTimeout(tryPerformRpc, 10000); // Retry after 10 seconds
@@ -139,16 +148,19 @@ export function LiveKitClient() {
     })
   }
 
-  this.getLocation = async () => {
+  this.getVehicleStatus = async () => {
     const response = await room.localParticipant.performRpc({
       destinationIdentity: 'Android',
-      method: 'location',
+      method: 'status',
       payload: "",
     })
-    let res_json = JSON.parse(response).status
+    const res_json = JSON.parse(response)
+    const status = res_json.status
+    const location = res_json.location
     let update_loc = {
-      lat: res_json.latitude,
-      lng: res_json.longitude
+      lat: location.latitude,
+      lng: location.longitude,
+      recording: status.LOGS
     }
     return update_loc;
   }
@@ -160,7 +172,32 @@ export function LiveKitClient() {
       if (track.kind === Track.Kind.Video) {
         const videoElement = document.getElementById("video");
         track.attach(videoElement);
-        console.log("found video track")
+        console.log("found video track");
+      }
+      // Handle audio track for the first participant
+      if (track.kind === Track.Kind.Audio && participant === room.localParticipant) {
+        track.mute(); // Mute the audio track
+        console.log("Muted audio track for the first participant");
+
+        // Create a notification for the available audio track
+        const notification = document.createElement('div');
+        notification.innerText = "An audio track is available. Click to play.";
+        notification.style.position = 'fixed';
+        notification.style.bottom = '20px';
+        notification.style.left = '20px';
+        notification.style.backgroundColor = '#fff';
+        notification.style.padding = '10px';
+        notification.style.border = '1px solid #000';
+        notification.style.cursor = 'pointer';
+        document.body.appendChild(notification);
+
+        // Add click event to play the audio track
+        notification.onclick = () => {
+          const audioElement = document.getElementById('audio'); // Create an audio element
+          track.attach(audioElement); // Attach the audio track to the audio element
+          audioElement.play(); // Start playing the audio
+          document.body.removeChild(notification); // Remove the notification after clicking
+        };
       }
     });
 

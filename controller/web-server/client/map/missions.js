@@ -237,12 +237,7 @@ function Commutes(configuration) {
   initCommutesPanel();
   initCommutesModal();
 
-  window.startLocationService = (connection) => {
-    setInterval(async () => {
-        const results = await connection.getLocation();
-        updateRobotPosition(results);
-    }, 1000);
-}
+  window.locationCallbacks.updateRobotPosition = updateRobotPosition
 
   /**
    * Initializes map view on commutes widget.
@@ -260,6 +255,12 @@ function Commutes(configuration) {
     configuration.defaultTravelModeEnum =
         parseTravelModeEnum(configuration.defaultTravelMode);
     setTravelModeLayer(configuration.defaultTravelModeEnum);
+
+    // Add zoom change listener
+    google.maps.event.addListener(commutesMap, 'zoom_changed', () => {
+        const zoomLevel = commutesMap.getZoom();
+        togglePolylineAndMarkers(zoomLevel);
+    });
   }
 
   /**
@@ -725,14 +726,17 @@ function Commutes(configuration) {
     const distance = directionLeg.distance.text;
     const duration = convertDurationValueAsString(directionLeg.duration.value);
 
+    // Interpolate waypoints every 5 meters
+    const interpolatedPath = interpolatePath(path, 5); // 5 meters
 
     const marker = createMarker(destinationLocation, destination.label);
-
-    const markers = path.map((location, index) => {
-        const isTurn = index > 0 && index < path.length - 1 && isTurnPoint(path[index - 1], location, path[index + 1]);
+    // Add markers for each point in the interpolated path
+    const markers = interpolatedPath.map((location, index) => {
+        const isTurn = index > 0 && index < interpolatedPath.length - 1 && isTurnPoint(interpolatedPath[index - 1], location, interpolatedPath[index + 1]);
         return createWaypointMarker(location, undefined, isTurn);
     });
-    
+
+    // Create transparent polylines
     const innerStroke = new google.maps.Polyline({
         path: path,
         strokeColor: STROKE_COLORS.inactive.innerStroke,
@@ -748,16 +752,44 @@ function Commutes(configuration) {
         strokeWeight: 6,
         zIndex: 1
     });
-  
+
     innerStroke.setMap(commutesMap);
     outerStroke.setMap(commutesMap);
-  
+
     destination.distance = distance;
     destination.duration = duration;
     destination.marker = marker;
     destination.markers = markers;
     destination.polylines = {innerStroke, outerStroke};
     destination.bounds = bounds;
+  }
+
+  /**
+   * Interpolates points along a path to ensure there is a point every specified distance.
+   * @param {Array} path - The original path of LatLng points.
+   * @param {number} interval - The distance in meters between interpolated points.
+   * @returns {Array} - The new array of LatLng points with interpolated points.
+   */
+  function interpolatePath(path, interval) {
+    const interpolatedPoints = [];
+    
+    for (let i = 0; i < path.length - 1; i++) {
+        const start = path[i];
+        const end = path[i + 1];
+        const segmentDistance = google.maps.geometry.spherical.computeDistanceBetween(start, end);
+        const numPoints = Math.floor(segmentDistance / interval);
+        
+        interpolatedPoints.push(start); // Add the starting point
+
+        for (let j = 1; j <= numPoints; j++) {
+            const fraction = j / numPoints;
+            const interpolatedPoint = google.maps.geometry.spherical.interpolate(start, end, fraction);
+            interpolatedPoints.push(interpolatedPoint);
+        }
+    }
+
+    interpolatedPoints.push(path[path.length - 1]); // Add the last point
+    return interpolatedPoints;
   }
 
   // Helper function to determine if a point is a turn
@@ -773,12 +805,12 @@ function createWaypointMarker(location, label, isTurn = false) {
         fillColor: '#4285F4', // Blue fill
         fillOpacity: 1,
         strokeWeight: isTurn ? 2 : 0, // Yellow border for turns
-        strokeColor: isTurn ? '#FFD700' : '#4285F4' // Yellow for turns, blue for normal
+        strokeColor: '#4285F4' // Yellow for turns, blue for normal
     };
 
     const mapOptions = {
         position: location,
-        map: commutesMap,
+        map: null,
         icon: markerIconConfig,
     };
 
@@ -954,6 +986,7 @@ function createWaypointMarker(location, label, isTurn = false) {
                 fontSize: '16px',
               },
         });
+        commutesMap.setCenter(newPosition);
     }
     robotPosition = newPosition;
 }
@@ -1032,6 +1065,29 @@ function createWaypointMarker(location, label, isTurn = false) {
    */
   function hideModal(focusEl) {
     hideElement(commutesEl.modal, focusEl || lastActiveEl);
+  }
+
+  const ZOOM_THRESHOLD = 17;
+  function togglePolylineAndMarkers(zoomLevel) {
+    if (zoomLevel > ZOOM_THRESHOLD) {
+        // Zoomed in: Show waypoints, make polylines transparent
+        for (const destination of destinations) {
+            destination.polylines.innerStroke.setOptions({ strokeOpacity: 0.0 }); // Make inner stroke transparent
+            destination.polylines.outerStroke.setOptions({ strokeOpacity: 0.0 }); // Make outer stroke transparent
+            destination.markers.forEach(marker => {
+                marker.setMap(commutesMap); // Show markers
+            });
+        }
+    } else {
+        // Zoomed out: Show polylines, hide waypoints
+        for (const destination of destinations) {
+            destination.polylines.innerStroke.setOptions({ strokeOpacity: 1.0 }); // Make inner stroke visible
+            destination.polylines.outerStroke.setOptions({ strokeOpacity: 1.0 }); // Make outer stroke visible
+            destination.markers.forEach(marker => {
+                marker.setMap(null); // Hide markers
+            });
+        }
+    }
   }
 }
 

@@ -15,6 +15,9 @@ const firebaseConfig = {
     measurementId: import.meta.env.SNOWPACK_PUBLIC_MEASUREMENT_ID,
 }
 
+const googleApiClientID = "154487542187-eca7ghfm2vepoaglvjurdalu3c6tntjr.apps.googleusercontent.com"
+console.log(googleApiClientID)
+
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 const provider = new GoogleAuthProvider()
@@ -22,22 +25,52 @@ export const FirebaseStorage = getStorage()
 export const db = getFirestore(app)
 
 /**
+ * Function to initialize Google API
+ * @returns {Promise<void>}
+ */
+export async function initializeGoogleAPI() {
+    return new Promise((resolve, reject) => {
+        gapi.load('auth2', () => {
+            try {
+                // Initialize auth2 with your client ID
+                gapi.auth2.init({
+                    client_id: googleApiClientID
+                }).then(() => {
+                    console.log('Google Auth initialized');
+                    resolve();  // Resolve after successful initialization
+                }).catch((error) => {
+                    console.error('Error initializing Google Auth', error);
+                    reject(error);  // Reject if there's an error
+                });
+            } catch (err) {
+                reject(err);  // Handle unexpected errors
+            }
+        });
+    });
+}
+
+/**
  * Function to google Sign in
  * @returns {Promise<unknown>}
  */
-export function googleSigIn () {
+export function googleSigIn() {
     return new Promise((resolve, reject) => {
+        provider.addScope('https://www.googleapis.com/auth/drive.metadata.readonly'); // Request Drive API access
         signInWithPopup(auth, provider)
             .then((result) => {
-                // The signed-in user info.
-                const user = result.user
-                resolve(user)
+                const credential = GoogleAuthProvider.credentialFromResult(result);
+                const accessToken = credential.accessToken; // Get access token
+                console.log(accessToken)
+                if (accessToken) {
+                    localStorage.setItem('driveAccessToken', accessToken); // Store access token
+                }
+
+                resolve(result.user);
             })
             .catch((error) => {
-                // Handle Errors here.
-                reject(error)
-            })
-    })
+                reject(error);
+            });
+    });
 }
 
 /**
