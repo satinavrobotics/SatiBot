@@ -5,21 +5,21 @@
 class MyServerCallbacks : public BLEServerCallbacks {
 private:
     Communication* comm;
-    
+
 public:
     MyServerCallbacks(Communication* comm) : comm(comm) {}
-    
+
     void onConnect(BLEServer* bleServer, esp_ble_gatts_cb_param_t* param) {
         // Direct access to the deviceConnected flag
         comm->deviceConnected = true;
         Serial.println("BT Connected");
-        
+
         // Set connection parameters to improve stability
         uint16_t minInterval = 0x06;  // 7.5ms (6 * 1.25ms)
         uint16_t maxInterval = 0x0C;  // 15ms (12 * 1.25ms)
         uint16_t latency = 0;         // Number of connection events
         uint16_t timeout = 500;       // 5s (500 * 10ms)
-        
+
         bleServer->updateConnParams(param->connect.remote_bda, minInterval, maxInterval, latency, timeout);
     }
 
@@ -33,13 +33,13 @@ public:
 class MyCallbacks : public BLECharacteristicCallbacks {
 private:
     Communication* comm;
-    
+
 public:
     MyCallbacks(Communication* comm) : comm(comm) {}
-    
+
     void onWrite(BLECharacteristic* pCharacteristic) {
         std::string rxValue = pCharacteristic->getValue().c_str();
-        
+
         if (rxValue.length() > 0) {
             // Process each character
             for (int i = 0; i < rxValue.length(); i++) {
@@ -50,9 +50,9 @@ public:
 };
 #endif
 
-Communication::Communication(Config* config, Motors* motors, Sensors* sensors)
+Communication::Communication(Config* config, VelocityController* velocityController, Sensors* sensors)
     : config(config),
-      motors(motors),
+      velocityController(velocityController),
       sensors(sensors),
       msgPart(HEADER),
       header('\0'),
@@ -65,7 +65,7 @@ Communication::Communication(Config* config, Motors* motors, Sensors* sensors)
       oldDeviceConnected(false)
 #endif
 {
-      
+
 #if defined(ESP32)
     SERVICE_UUID = "61653dc3-4021-4d1e-ba83-8b4eec61d613";
     CHARACTERISTIC_UUID_RX = "06386c14-86ea-4d71-811c-48f97c58f8c9";
@@ -76,7 +76,7 @@ Communication::Communication(Config* config, Motors* motors, Sensors* sensors)
 void Communication::begin() {
     Serial.begin(115200);
     Serial.println('r');
-    
+
 #if defined(ESP32)
     if (config->hasBluetoothSupport()) {
         initializeBluetooth();
@@ -88,7 +88,6 @@ void Communication::processIncomingMessages() {
     if (Serial.available() > 0) {
         onSerialRx();
     }
-    
     // Bluetooth messages are handled through callbacks, no need to check here
     // The onBleRx method is called directly from the BLE callback
 }
@@ -128,7 +127,7 @@ void Communication::parseMsg() {
         Serial.print("Message body: ");
         Serial.println(msgBuf);
     }
-    
+
     switch (header) {
         case 'c':
             processCtrlMsg();
@@ -138,6 +137,9 @@ void Communication::parseMsg() {
             break;
         case 'h':
             processHeartbeatMsg();
+            break;
+        case 'p':
+            processPidControllerMsg();
             break;
         default:
             if (config->isDebugMode()) {
@@ -154,23 +156,26 @@ void Communication::parseMsg() {
 void Communication::processCtrlMsg() {
     char *tmp;                    // this is used by strtok() as an index
     tmp = strtok(msgBuf, ",:");   // replace delimiter with \0
-    int leftControl = atoi(tmp);  // convert to int
+    float linearVelocity = atof(tmp);  // convert to float
     tmp = strtok(NULL, ",:");     // continues where the previous call left off
-    int rightControl = atoi(tmp); // convert to int
-    
-    motors->setLeftControl(leftControl);
-    motors->setRightControl(rightControl);
-    
-    Serial.print("Control: ");
-    Serial.print(leftControl);
+    float angularVelocity = atof(tmp); // convert to float
+
+    // Set velocity directly using the VelocityController
+    velocityController->setTargetLinearVelocity(linearVelocity);
+    velocityController->setTargetAngularVelocity(angularVelocity);
+
+    // Controller is always enabled
+
+    Serial.print("Velocity: ");
+    Serial.print(linearVelocity);
     Serial.print(",");
-    Serial.println(rightControl);
+    Serial.println(angularVelocity);
 }
 
 void Communication::processHeartbeatMsg() {
     heartbeatInterval = atol(msgBuf);  // convert to long
     heartbeatTime = millis();
-    
+
     if (config->isDebugMode()) {
         Serial.print("Heartbeat Interval: ");
         Serial.println(heartbeatInterval);
@@ -179,18 +184,18 @@ void Communication::processHeartbeatMsg() {
 
 void Communication::processFeatureMsg() {
     String msg = "f" + config->getRobotTypeString() + ":";
-    
+
     if (config->hasStatusLeds()) {
         msg += "ls:";
     }
-    
+
     sendData(msg);
 }
 
 void Communication::sendData(String data) {
     Serial.print(data);
     Serial.println();
-    
+
 #if defined(ESP32)
     if (config->hasBluetoothSupport() && deviceConnected) {
         char outData[MAX_MSG_SZ] = "";
@@ -203,9 +208,18 @@ void Communication::sendData(String data) {
 #endif
 }
 
+// New method to handle sending data with a command prefix and value
+void Communication::sendData(char cmd, const char* value) {
+    String data = String(cmd) + String(value);
+    sendData(data);
+}
 
 bool Communication::isHeartbeatExpired() {
     return (millis() - heartbeatTime) >= heartbeatInterval;
+}
+
+void Communication::updateHeartbeat() {
+    heartbeatTime = millis();
 }
 
 #if defined(ESP32)
@@ -216,11 +230,11 @@ void Communication::setDeviceConnected(bool connected) {
 void Communication::initializeBluetooth() {
     Serial.println("Initializing Bluetooth...");
     String bleName = "OpenBot: " + config->getRobotTypeString();
-    
+
     BLEDevice::init(bleName.c_str());
     bleServer = BLEDevice::createServer();
     bleServer->setCallbacks(new MyServerCallbacks(this));
-    
+
     BLEService *pService = bleServer->createService(BLEUUID(SERVICE_UUID));
 
     pTxCharacteristic = pService->createCharacteristic(
@@ -279,3 +293,31 @@ void Communication::onBleRx(char inChar) {
     }
 }
 #endif
+
+void Communication::processPidControllerMsg() {
+    char *tmp;
+    tmp = strtok(msgBuf, ",:");
+    int controlEnabled = atoi(tmp);
+    tmp = strtok(NULL, ",:");
+    float kp = atof(tmp);
+    tmp = strtok(NULL, ",:");
+    float ki = atof(tmp);
+    tmp = strtok(NULL, ",:");
+    float kd = atof(tmp);
+
+    // Update the PID controller parameters directly
+    // Always keep the controller enabled, regardless of the command
+    // Set PID parameters if provided
+    if (kp > 0) velocityController->setKp(kp);
+    if (ki > 0) velocityController->setKi(ki);
+    if (kd > 0) velocityController->setKd(kd);
+
+    // Controller is always enabled - no need to call enable()
+
+    Serial.print("PID Controller: Always Enabled, Kp: ");
+    Serial.print(velocityController->getKp());
+    Serial.print(", Ki: ");
+    Serial.print(velocityController->getKi());
+    Serial.print(", Kd: ");
+    Serial.println(velocityController->getKd());
+}

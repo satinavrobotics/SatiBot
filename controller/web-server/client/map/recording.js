@@ -28,7 +28,6 @@ export function Recorder() {
      * @param {boolean} isRecording - true if recording is on, false otherwise
      */
     function updateRecorder (status) {
-        console.log("update recorder")
         const isRecording = status.recording
         const startRecordingButton = document.getElementById('start-recording-btn')
         if (isRecording) {

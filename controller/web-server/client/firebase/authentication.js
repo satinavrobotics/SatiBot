@@ -34,7 +34,7 @@ export async function initializeGoogleAPI() {
             try {
                 // Initialize auth2 with your client ID
                 gapi.auth2.init({
-                    client_id: googleApiClientID
+                    client_id: googleApiClientID,
                 }).then(() => {
                     console.log('Google Auth initialized');
                     resolve();  // Resolve after successful initialization

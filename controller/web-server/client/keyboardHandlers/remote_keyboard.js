@@ -10,72 +10,71 @@
 
 export function RemoteKeyboard (commandHandler) {
   const pressedKeys = new Set()
+  let pollInterval = null
+  
+  // Poll interval in milliseconds
+  const POLL_RATE = 200
+  
+  // Velocity scaling constants
+  const BASE_VELOCITY = 8.0
+  const VELOCITY_SCALE = POLL_RATE / 1000 // Convert to seconds
+
+  const updateMovement = () => {
+    if (!pressedKeys.size) return
+    
+    let linear = 0
+    let angular = 0
+    
+    // Forward/Backward with scaled velocity
+    if (pressedKeys.has('w')) linear = BASE_VELOCITY * VELOCITY_SCALE
+    if (pressedKeys.has('s')) linear = -BASE_VELOCITY * VELOCITY_SCALE
+    
+    // Left/Right with scaled velocity
+    if (pressedKeys.has('a')) angular = BASE_VELOCITY * VELOCITY_SCALE
+    if (pressedKeys.has('d')) angular = -BASE_VELOCITY * VELOCITY_SCALE
+    
+    // If any movement keys are pressed, send command
+    if (pressedKeys.has('w') || pressedKeys.has('s') || 
+        pressedKeys.has('a') || pressedKeys.has('d')) {
+      commandHandler.gamepadCommand(linear, angular)
+    }
+  }
+
+  // Start polling when first key is pressed
+  const startPolling = () => {
+    if (!pollInterval) {
+      pollInterval = setInterval(updateMovement, POLL_RATE)
+    }
+  }
+
+  // Stop polling when no keys are pressed
+  const stopPolling = () => {
+    if (pollInterval) {
+      clearInterval(pollInterval)
+      pollInterval = null
+      commandHandler.gamepadCommand(0, 0) // Stop movement
+    }
+  }
+
   this.processKey = keyPress => {
     switch (keyPress?.type) {
       case 'keyup':
-        // keep track of what keys are currently pressed
         pressedKeys.delete(keyPress.key)
-        if (['w', 's'].includes(keyPress.key)) {
-          commandHandler.reset()
-          break
-        }
-
-        if (['a', 'd'].includes(keyPress.key)) {
-          if (pressedKeys.has('w')) {
-            commandHandler.goForward()
-            break
-          }
-          if (pressedKeys.has('s')) {
-            commandHandler.goBackward()
-            break
-          }
-          commandHandler.reset()
+        if (pressedKeys.size === 0) {
+          stopPolling()
         }
         break
 
       case 'keydown':
-        pressedKeys.add(keyPress.key)
+        // Only handle movement keys here
+        if (['w', 'a', 's', 'd'].includes(keyPress.key)) {
+          pressedKeys.add(keyPress.key)
+          startPolling()
+          break
+        }
+        
+        // Handle other commands as before
         switch (keyPress.key) {
-          case 'w':
-            if (pressedKeys.has('a')) {
-              commandHandler.forwardLeft()
-              break
-            }
-            if (pressedKeys.has('d')) {
-              commandHandler.forwardRight()
-              break
-            }
-            commandHandler.goForward()
-            break
-          case 's':
-            if (pressedKeys.has('a')) {
-              commandHandler.backwardLeft()
-              break
-            }
-            if (pressedKeys.has('d')) {
-              commandHandler.backwardRight()
-              break
-            }
-            commandHandler.goBackward()
-            break
-          case 'a':
-            if (pressedKeys.has('w')) {
-              commandHandler.forwardLeft()
-            } else if (pressedKeys.has('s')) {
-              commandHandler.backwardLeft()
-            } else {
-              commandHandler.rotateLeft()
-            }
-            break
-          case 'd':
-            if (pressedKeys.has('w')) {
-              commandHandler.forwardRight()
-            } else if (pressedKeys.has('s')) {
-              commandHandler.backwardRight()
-            } else {
-              commandHandler.rotateRight()
-            }
-            break
           case 'n':
             commandHandler.sendCommand('NOISE')
             break
@@ -112,46 +111,40 @@ export function RemoteKeyboard (commandHandler) {
 
   this.processGamepad = (gamepad) => {
     if (!gamepad) return;
-    
+  
     // Apply deadzone to joystick input
-    const applyDeadzone = (value, deadzone = 0.05) => {
-      return Math.abs(value) < deadzone ? 0 : value;
-    };
-    
-    // Get joystick and trigger values
+    const applyDeadzone = (value, deadzone = 0.05) =>
+      Math.abs(value) < deadzone ? 0 : value;
+  
+    // Helper to clamp values between -1 and 1
+    const clamp = (value, min = -1, max = 1) =>
+      Math.max(min, Math.min(max, value));
+  
+    // Read joystick and trigger values
     const leftJoystickX = applyDeadzone(gamepad.axes[0]);
-    const rightTrigger = gamepad.buttons[7].value; // Right trigger (RT)
-    const leftTrigger = gamepad.buttons[6].value;  // Left trigger (LT)
-    
-    // Calculate thrust based on trigger values
-    const forwardThrust = rightTrigger; // RT for forward
-    const backwardThrust = leftTrigger; // LT for backward
-    
-    // Net thrust (positive for forward, negative for backward)
-    const netThrust = forwardThrust - backwardThrust;
-    
-    // Calculate steering based on left joystick horizontal axis
-    // Invert steering direction when going backwards for more intuitive control
+    const rightTrigger = gamepad.buttons[7].value; // RT for forward
+    const leftTrigger = gamepad.buttons[6].value;  // LT for backward
+  
+    // Compute net thrust (positive = forward, negative = backward)
+    const netThrust = rightTrigger - leftTrigger;
+  
+    // Determine steering: invert when moving backwards for intuitive control
     const steeringDirection = netThrust >= 0 ? 1 : -1;
     const steeringFactor = Math.abs(netThrust) > 0.1 ? 0.5 : 1.0;
-    const steering = leftJoystickX * steeringFactor * steeringDirection;
-    
-    // Calculate left and right drive values with proper clamping
-    let leftDrive = netThrust + steering;
-    let rightDrive = netThrust - steering;
-    
-    // Normalize values to ensure they stay within [-1, 1] range
-    const max = Math.max(1, Math.abs(leftDrive), Math.abs(rightDrive));
-    if (max > 1) {
-      leftDrive /= max;
-      rightDrive /= max;
-    }
-    
-    // Only send commands if there's actual input
-    if (Math.abs(leftDrive) > 0.01 || Math.abs(rightDrive) > 0.01) {
-      commandHandler.gamepadCommand(leftDrive, rightDrive);
+    const rawSteering = leftJoystickX * steeringFactor * steeringDirection;
+  
+    // Compute linear and angular velocities
+    const linearVelocity = clamp(netThrust);
+    const angularVelocity = clamp(rawSteering);
+  
+    // Only send commands if there's significant input
+    if (
+      Math.abs(linearVelocity) > 0.01 ||
+      Math.abs(angularVelocity) > 0.01
+    ) {
+      commandHandler.gamepadCommand(linearVelocity, angularVelocity);
     } else {
-      // Send zero command to stop when no input
+      // Stop when no input
       commandHandler.gamepadCommand(0, 0);
     }
   };

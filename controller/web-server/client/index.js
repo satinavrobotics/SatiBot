@@ -10,6 +10,7 @@ import {Recorder} from './map/recording.js'
 
 
 const connection = new LiveKitClient();
+window.connection = connection
 const recorder = new Recorder();
 (async () => {
     const keyboard = new Keyboard()
@@ -22,11 +23,54 @@ const recorder = new Recorder();
         (cmd)=>connection.sendDriveCommand(cmd)
     )
     const remoteKeyboard = new RemoteKeyboard(command.getCommandHandler())
-    const onKeyPress = (key) => remoteKeyboard.processKey(key)
-    const onGamePadInput = (gamepad) => remoteKeyboard.processGamepad(gamepad)
+    const inputModeToggle = document.getElementById('input-mode-toggle');
+    let currentInputMode = 'keyboard';
 
-    keyboard.start(onKeyPress, () => connection.stop())
-    gamepad.start(onGamePadInput)
+    const updateToggleState = (isGamepadConnected) => {
+        console.log('Updating toggle state:', isGamepadConnected);
+        if (inputModeToggle) {
+            inputModeToggle.disabled = !isGamepadConnected;
+            inputModeToggle.checked = isGamepadConnected;
+            currentInputMode = isGamepadConnected ? 'gamepad' : 'keyboard';
+            showMessage(`Using ${currentInputMode} input`);
+        }
+    };
+
+    const showMessage = (message) => {
+        const messageElement = document.getElementById('input-mode-message');
+        if (messageElement) {
+            messageElement.textContent = message;
+            messageElement.style.display = 'block';
+            setTimeout(() => {
+                messageElement.style.display = 'none';
+            }, 1000);
+        }
+    };
+
+    const onKeyPress = (key) => {
+        if (currentInputMode === 'keyboard') {
+            remoteKeyboard.processKey(key);
+        }
+    };
+
+    const onGamePadInput = (gamepad) => {
+        if (currentInputMode === 'gamepad' && gamepad.connected) {
+            remoteKeyboard.processGamepad(gamepad);
+        }
+    };
+
+    inputModeToggle.addEventListener('change', (event) => {
+        if (!event.target.disabled) {
+            currentInputMode = event.target.checked ? 'gamepad' : 'keyboard';
+            showMessage(`Switched to ${currentInputMode} input`);
+        }
+    });
+
+    // Initialize gamepad and keyboard
+    const gamepadInstance = new Gamepad();
+    gamepadInstance.setConnectionStateCallback(updateToggleState);
+    keyboard.start(onKeyPress, () => connection.stop());
+    gamepadInstance.start(onGamePadInput)
     recorder.init(command.getCommandHandler())
 })()
 
@@ -59,7 +103,7 @@ function handleSignInButtonClick() {
                 sendId()
 
                 // Fetch Google Drive folders after signing in
-                recorder.fetchDriveFolders(); // Fetch folders
+                //recorder.fetchDriveFolders(); // Fetch folders
             })
             .catch((error) => {
                 // Handle any errors that might occur during sign-in
@@ -236,7 +280,7 @@ function handleAuthChangedOnRefresh() {
                     localStorage.setItem(localStorageKeys.isSignIn, 'true')
                     sendId()
 
-                    recorder.fetchDriveFolders()
+                    //recorder.fetchDriveFolders()
                 }
             })
         }, 1000)

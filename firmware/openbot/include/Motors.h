@@ -7,46 +7,25 @@ class Motors {
 public:
     Motors(Config* config);
 
-    // Motor control methods
-    void updateLeftMotors(int controlValue);
-    void updateRightMotors(int controlValue);
-    void stopLeftMotors();
-    void stopRightMotors();
-    void updateVehicle(int leftControl, int rightControl);
+    // New method to update vehicle using normalized linear velocity and heading adjustment
+    void updateVehicle(float normalizedLinearVelocity, float headingAdjustment);
 
-    // Get current control values
-    int getLeftControl() const;
-    int getRightControl() const;
-
-    // Set control values
-    void setLeftControl(int value);
-    void setRightControl(int value);
+    // Get current PWM values (for SatiBot V1)
+    int getCurrentPwmLeft() const;
+    int getCurrentPwmRight() const;
 
 private:
     Config* config;
 
-    // Control values
-    volatile int ctrlLeft;
-    volatile int ctrlRight;
-
     // For SatiBot V1 with acceleration
     int currentPwmLeft;
     int currentPwmRight;
-    unsigned long lastUpdateLeft;
-    unsigned long lastUpdateRight;
-    unsigned long lastDirectionChangeLeft;
-    unsigned long lastDirectionChangeRight;
 
-    // Constants for acceleration
-    const unsigned long accelInterval = 10;  // interval (in ms) between PWM updates
-    const int accelStep = 1;                 // amount to change PWM per update
-    const unsigned long directionChangeDelay = 200; // delay before changing direction
+    // Timestamp for the last direct update
+    unsigned long lastDirectUpdateTime;
 
-    // Helper methods
-    void updateLeftMotorsV0();
-    void updateRightMotorsV0();
-    void updateLeftMotorsV1();
-    void updateRightMotorsV1();
+    // Interval between direct updates (in milliseconds)
+    const unsigned long directUpdateInterval = 20;  // 20ms = 50Hz update rate
 };
 
 #endif // MOTORS_H

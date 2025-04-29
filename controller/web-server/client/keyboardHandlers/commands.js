@@ -50,54 +50,70 @@ export function CommandHandler (sendCommand, sendDriveCmd) {
   const left = new DriveValue()
   const right = new DriveValue()
   const commandReducer = new DriveCommandReducer()
+  
+  // Constants for velocity scaling
+  const BASE_UPDATE_RATE = 60 // Base rate in Hz
+  const MAX_LINEAR_VELOCITY = 1.0
+  const MAX_ANGULAR_VELOCITY = 1.0
+  const UPDATE_RATE = 1000 / 16 // Convert from ms to Hz (16ms = ~60Hz)
+  
+  // Scale factors based on update frequency
+  const linearScale = (MAX_LINEAR_VELOCITY * BASE_UPDATE_RATE) / UPDATE_RATE
+  const angularScale = (MAX_ANGULAR_VELOCITY * BASE_UPDATE_RATE) / UPDATE_RATE
 
   this.sendCommand = (cmd) => sendCommand(cmd)
 
-  const sendDriveCommand = (left, right) => {
-    //commandReducer.send({ l: left, r: right }, sendDriveCmd)
+  const sendWheelCommand = (left, right) => {
     sendDriveCmd({ l: left, r: right })
   }
 
-   this.gamepadCommand = (left, right) => {
-    sendDriveCommand(left, right)
+  const sendSteeringCommand = (linear, angular) => {
+    // Apply scaling to the velocities
+    const scaledLinear = linear * linearScale
+    const scaledAngular = angular * angularScale
+    sendDriveCmd({ l: scaledLinear, a: scaledAngular })
+  }
+
+  this.gamepadCommand = (linear, angular) => {
+    sendSteeringCommand(linear, angular)
   }
 
   this.reset = () => {
     left.reset()
     right.reset()
-    sendDriveCommand(0, 0)
+    sendWheelCommand(0, 0)
   }
 
   this.forwardLeft = () => {
-    sendDriveCommand(left.min() / 2, right.max())
+    sendWheelCommand(left.min() / 2, right.max())
   }
 
   this.forwardRight = () => {
-    sendDriveCommand(left.max(), right.min() / 2)
+    sendWheelCommand(left.max(), right.min() / 2)
   }
 
   this.backwardLeft = () => {
-    sendDriveCommand(left.max() / 2, right.min())
+    sendWheelCommand(left.max() / 2, right.min())
   }
 
   this.backwardRight = () => {
-    sendDriveCommand(left.min(), right.max() / 2)
+    sendWheelCommand(left.min(), right.max() / 2)
   }
 
   this.rotateLeft = () => {
-    sendDriveCommand(left.min(), right.max())
+    sendWheelCommand(left.min(), right.max())
   }
 
   this.rotateRight = () => {
-    sendDriveCommand(left.max(), right.min())
+    sendWheelCommand(left.max(), right.min())
   }
 
   this.goForward = () => {
-    sendDriveCommand(left.max(), right.max())
+    sendWheelCommand(left.max(), right.max())
   }
 
   this.goBackward = () => {
-    sendDriveCommand(left.min(), right.min())
+    sendWheelCommand(left.min(), right.min())
   }
 }
 

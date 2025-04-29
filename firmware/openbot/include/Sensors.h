@@ -7,6 +7,10 @@
 #include <Adafruit_Sensor.h>
 #include "KalmanFilter.h"
 
+// Forward declarations to avoid circular dependencies
+class Communication;
+class Motors;
+
 class Sensors {
 public:
     Sensors(Config* config);
@@ -14,9 +18,17 @@ public:
     // Initialize sensors
     void begin();
 
+    // Set communication object for sending data
+    void setCommunication(Communication* communication);
+
+    // Set motors object for accessing motor control values
+    void setMotors(Motors* motors);
+
     // IMU methods
     void readIMU();
     float getAngularVelocityFromIMU();
+    void calibrateIMU();
+    void updateIMUReading();  // Called by timer every 2ms
 
     // Wheel encoder methods
     void updateWheelCounts();
@@ -53,6 +65,8 @@ public:
 
 private:
     Config* config;
+    Communication* communication; // Pointer to communication object
+    Motors* motors; // Pointer to motors object
 
     // IMU sensor
     Adafruit_MPU6050 mpu;
@@ -62,6 +76,8 @@ private:
     int16_t accelData[3];
     int16_t gyroData[3];
     float ax, ay, az, gx, gy, gz; // acceleration (m/s²), gyro (rad/s)
+    float ax_bias, ay_bias, az_bias; // Accelerometer bias values
+    float gx_bias, gy_bias, gz_bias; // Gyroscope bias values
 
     // Odometry data
     volatile static unsigned int pulseCountLeft;
@@ -78,11 +94,20 @@ private:
     static const float wheelBase;
 
     // IMU sampling parameters
-    static const unsigned long imuSampleInterval = 10; // 10ms
-    static const int numSamples = 25; // 25 samples over 250ms
-    float gzSamples[25]; // Array to store gz samples
-    int sampleIndex; // Current sample index
-    unsigned long lastIMUSampleTime; // Last IMU sample time
+    float filteredYawRate;            // Filtered yaw rate using simple average
+    static const int IMU_BUFFER_SIZE = 10;  // Size of the IMU buffer for averaging
+    float imuBuffer[IMU_BUFFER_SIZE];      // Buffer to store IMU readings
+    int imuBufferIndex;                   // Current index in the buffer
+    int imuBufferCount;                   // Number of samples in the buffer
+    bool newIMUDataAvailable;             // Flag to indicate new IMU data is available
+    unsigned long lastIMUSampleTime;      // Last IMU sample time
+
+    // New IMU sampling parameters
+    unsigned long lastUpdateTime;         // Last time the average was calculated
+    static const unsigned long imuSampleInterval = 2;  // Sample interval in ms
+    static const unsigned long updateInterval = 50;    // Update interval in ms
+    float gxSamples[IMU_BUFFER_SIZE];     // Buffer to store gx samples
+    int sampleIndex;                      // Current index in the sample buffer
 
     // Helper methods
     void countLeft();
