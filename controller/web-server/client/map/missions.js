@@ -1,5 +1,6 @@
 'use strict';
 
+
 /**
  * Element selectors for commutes widget.
  */
@@ -570,6 +571,7 @@ function Commutes(configuration) {
   function buildDestinationCardTemplate(
       destination, destinationIdx, destinationOperation) {
     let editButtonEl;
+    let sendButtonEl;
     switch (destinationOperation) {
       case DestinationOperation.ADD:
         destinationPanelEl.list.insertAdjacentHTML(
@@ -581,6 +583,7 @@ function Commutes(configuration) {
           handleRouteClick(destination, destinationIdx);
         });
         editButtonEl = destinationContainerEl.querySelector('.edit-button');
+        sendButtonEl = destinationContainerEl.querySelector('.send-mission-button');
         destinationPanelEl.container.scrollLeft =
             destinationPanelEl.container.scrollWidth;
         break;
@@ -592,10 +595,16 @@ function Commutes(configuration) {
           handleRouteClick(destination, destinationIdx);
         });
         editButtonEl = activeDestinationContainerEl.querySelector('.edit-button');
+        sendButtonEl = activeDestinationContainerEl.querySelector('.send-mission-button');
         break;
       case DestinationOperation.DELETE:
       default:
     }
+
+    sendButtonEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleSendMission(destination);
+    });
 
     editButtonEl.addEventListener('click', () => {
       destinationModalEl.title.innerHTML = 'Edit destination';
@@ -692,6 +701,7 @@ function Commutes(configuration) {
       label: label || getNextMarkerLabel(),
       travelModeEnum: travelModeEnum,
       url: generateMapsUrl(destinationToAdd, travelModeEnum),
+      status: "pending"
     };
   }
 
@@ -762,6 +772,10 @@ function Commutes(configuration) {
     destination.markers = markers;
     destination.polylines = {innerStroke, outerStroke};
     destination.bounds = bounds;
+    destination.waypoints = interpolatedPath.map(point => ({
+        lat: point.lat(),
+        lng: point.lng()
+    }));
   }
 
   /**
@@ -968,23 +982,31 @@ function createWaypointMarker(location, label, isTurn = false) {
   }
 
   function updateRobotPosition(newPosition) {
+    const bearing = newPosition.bearing
+    const markerIconConfig = {
+        path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, // Use an arrow symbol
+        scale: 5,
+        fillColor: '#4285F4', // Color of the arrow
+        fillOpacity: 1,
+        strokeWeight: 1,
+        strokeColor: '#C5221F',
+    };
+
     if (robotMarker) {
         robotMarker.setPosition(newPosition);
+        robotMarker.setIcon({
+            ...markerIconConfig,
+            rotation: bearing, // Rotate the marker based on the bearing
+        });
     } else {
         robotMarker = new google.maps.Marker({
             position: newPosition,
             map: commutesMap,
             title: "Robot's Current Position",
-            label: {
-                text: '●' ,
-                fontFamily: 'Arial, sans-serif',
-                color: {
-                    fill: "#4285F4",
-                    stroke: '#C5221F',
-                    label: '#FFFFFF',
-                },
-                fontSize: '16px',
-              },
+            icon: {
+                ...markerIconConfig,
+                rotation: bearing, // Set initial rotation based on bearing
+            },
         });
         commutesMap.setCenter(newPosition);
     }
@@ -1089,6 +1111,55 @@ function createWaypointMarker(location, label, isTurn = false) {
         }
     }
   }
+
+  function handleSendMission(destination) {
+    if (!robotPosition) {
+      alert('Robot not connected!');
+      return;
+    }
+  
+    const confirmation = confirm(`Send ${destination.name} mission to robot?`);
+    if (!confirmation) return;
+
+    
+  
+    // Convert waypoints to robot format
+    const missionData = {
+      // select only the first 10 waypoints
+      waypoints: destination.waypoints.slice(0, 10),
+      //polyline: destination.mission.polyline.getPath().getArray(),
+      metadata: {
+        destination_name: destination.name,
+        distance: destination.distance,
+        estimated_duration: destination.duration
+      }
+    };
+  
+    sendCommandsToRobot(missionData).then(() => {
+        destination.status = 'sent';
+        updateMissionStatusDisplay(destination);
+    });
+  }
+
+  async function sendCommandsToRobot(missionData) {
+    if (window.connection == null || window.connection == undefined) {
+        alert("Not connected to robot!")
+        return
+    }
+    // Implementation to send waypoints to robot API
+    await window.connection.sendWaypointCommand(missionData);
+  }
+
+  function updateMissionStatusDisplay(destination) {
+    const destinationEl = destinationPanelEl.list.querySelector(
+      `[data-place-id="${destination.place_id}"]`
+    );
+    if (destinationEl) {
+      const statusEl = destinationEl.querySelector('.mission-status');
+      statusEl.textContent = destination.status;
+      statusEl.className = `mission-status ${destination.status}`;
+    }
+  }
 }
 
 /**
@@ -1170,12 +1241,13 @@ function generateDestinationTemplate(destination) {
     </div>
 
     <div class="destination-controls">
-      <a class="directions-button" href=${destination.url} target="_blank"
-         aria-label="Link to directions in Google Maps">
-        <svg aria-label="Directions icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <use href="#commutes-directions-icon"/>
-        </svg>
-      </a>
+        <button class="send-mission-button" aria-label="Send mission to robot">
+            <svg aria-label="Send mission icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <use href="#commutes-send-icon"/>
+            </svg>
+            Send Mission
+        </button>
+        <div class="mission-status">${destination.status}</div>
       <button class="edit-button" aria-label="Edit Destination">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
           <use href="#commutes-edit-icon"/>

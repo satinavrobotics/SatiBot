@@ -5,6 +5,7 @@
 #include "Motors.h"
 #include "Sensors.h"
 #include "Communication.h"
+#include "VelocityController.h"
 
 // Test modes
 #define TEST_NONE 0
@@ -14,6 +15,7 @@
 #define TEST_CONFIG 4
 #define TEST_PINS 5
 #define TEST_KALMAN 6
+#define TEST_ANGULAR_VELOCITY 7
 
 // Motor test submodes
 #define MOTOR_TEST_LEFT_FORWARD 1
@@ -39,7 +41,7 @@
 
 class Testing {
 public:
-    Testing(Config* config, Motors* motors, Sensors* sensors, Communication* communication);
+    Testing(Config* config, Motors* motors, Sensors* sensors, Communication* communication, VelocityController* velocityController);
 
     // Initialize testing
     void begin();
@@ -60,12 +62,14 @@ public:
     void runConfigTest();
     void runPinsTest(int submode);
     void runKalmanTest();
+    void runAngularVelocityTest();
 
 private:
     Config* config;
     Motors* motors;
     Sensors* sensors;
     Communication* communication;
+    VelocityController* velocityController;
 
     int currentTest;
     int currentSubmode;

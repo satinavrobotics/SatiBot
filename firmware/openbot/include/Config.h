@@ -18,9 +18,7 @@
 #define digitalPinToPinChangeInterrupt digitalPinToInterrupt
 #endif
 
-// SatiBot versions
-#define SATIBOT_V0 0
-#define SATIBOT_V1 1
+// SatiBot is always V1 now
 
 // Enable/Disable no phone mode (true/false)
 // In no phone mode:
@@ -33,14 +31,16 @@
 // Enable/Disable debug print (true/false)
 #define DEBUG_MODE false
 
+// Enable/Disable PID controller for angular velocity (true/false)
+#define PID_CONTROLLER_MODE true
+
 class Config {
 public:
-    Config(uint8_t robotType, uint8_t satibotVersion);
+    Config(uint8_t robotType);
 
     // Getters for configuration
     uint8_t getRobotType() const;
     uint8_t getMcuType() const;
-    uint8_t getSatibotVersion() const;
     String getRobotTypeString() const;
 
     // Feature flags
@@ -65,6 +65,7 @@ public:
     // Global settings
     bool isNoPhoneMode() const;
     bool isDebugMode() const;
+    bool isPidControllerMode() const;
 
     // No phone mode settings
     int getCtrlMax() const;
@@ -78,7 +79,6 @@ public:
 private:
     uint8_t robotType;
     uint8_t mcuType;
-    uint8_t satibotVersion;
     String robotTypeString;
 
     // Feature flags
@@ -103,6 +103,7 @@ private:
     // Global settings
     bool noPhoneMode;
     bool debugMode;
+    bool pidControllerMode;
 
     // No phone mode settings
     int ctrlMax;

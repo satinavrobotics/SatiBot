@@ -79,7 +79,7 @@
         </div>
 
         <!-- Command Sidebar -->
-        <div id="recording-panel" style="display: none;">
+        <div id="recording-panel" style="display: none; width: 400px;">
             <h3 style="margin-bottom: 15px; color: #ffffff;">Recording</h3>
             <button id="start-recording-btn" style="margin-bottom: 1em;">
                 Start Recording
@@ -284,7 +284,16 @@
         <div id="command-container" style="display: none;">
             <ul id="command-list"
                 style="list-style-type: none; background: #222; border-radius: 4px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.15); padding: 15px; margin: 0; width: fit-content; max-height: 100%; min-height: 100%; min-width: 200px; overflow-y: auto; color: white;">
-                <h3>Controls</h3>
+                <h3>Commands</h3>
+                <div class="toggle-switch-container">
+                    <span class="toggle-label">Input Mode:</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="input-mode-toggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span class="toggle-label" style="margin-left: 10px;">Keyboard | Gamepad</span>
+                </div>
+                <!-- Rest of the command list items -->
             </ul>
         </div>
     </div>
@@ -312,7 +321,7 @@
         </div>
     </div>
 </div>
-
+<div id="input-mode-message" style="position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.7); color: white; padding: 10px; border-radius: 5px; display: none; z-index: 1000;">Input mode switched</div>
 <style>
 .button-disabled {
   opacity: 0.5;

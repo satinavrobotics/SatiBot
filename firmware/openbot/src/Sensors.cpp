@@ -1,4 +1,6 @@
 #include "../include/Sensors.h"
+#include "../include/Communication.h"
+#include "../include/Motors.h"
 
 // Initialize static variables
 volatile unsigned int Sensors::pulseCountLeft = 0;
@@ -12,14 +14,25 @@ Sensors* sensorsInstance = nullptr;
 
 Sensors::Sensors(Config* config)
     : config(config),
+      communication(nullptr),
+      motors(nullptr),
       imuInitialized(false),
       lastRPMCalcTime(0),
       leftWheelVelocity(0.0f),
       rightWheelVelocity(0.0f),
       linearVelocity(0.0f),
-      sampleIndex(0),
+      filteredYawRate(0.0f),
+      imuBufferIndex(0),
+      imuBufferCount(0),
+      newIMUDataAvailable(false),
       lastIMUSampleTime(0),
-      lastKalmanUpdateTime(0) {
+      lastKalmanUpdateTime(0),
+      ax_bias(0.0f),
+      ay_bias(0.0f),
+      az_bias(0.0f),
+      gx_bias(0.0f),
+      gy_bias(0.0f),
+      gz_bias(0.0f) {
 
     // Initialize arrays
     for (int i = 0; i < 3; i++) {
@@ -27,12 +40,18 @@ Sensors::Sensors(Config* config)
         gyroData[i] = 0;
     }
 
+    // Initialize IMU buffer
+    for (int i = 0; i < IMU_BUFFER_SIZE; i++) {
+        gxSamples[i] = 0.0f;
+    }
+
     ax = ay = az = 0.0f;
     gx = gy = gz = 0.0f;
-
-    for (int i = 0; i < numSamples; i++) {
-        gzSamples[i] = 0.0f;
-    }
+    sampleIndex = 0;
+    lastUpdateTime = 0;
+    gx = gy = gz = 0.0f;
+    sampleIndex = 0;
+    lastUpdateTime = 0;
 
     // Set the global instance pointer
     sensorsInstance = this;
@@ -60,6 +79,9 @@ void Sensors::begin() {
         mpu.setGyroRange(MPU6050_RANGE_250_DEG);
         mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
         imuInitialized = true;
+
+        // Calibrate IMU to estimate gyro bias
+        calibrateIMU();
     } else {
         // Failed to initialize MPU6050
         imuInitialized = false;
@@ -69,6 +91,8 @@ void Sensors::begin() {
     kalmanFilter.begin();
     kalmanFilter.setDt(0.01); // 10ms time step
 }
+
+
 
 // Static interrupt handlers
 void Sensors::countLeftStatic() {
@@ -97,56 +121,6 @@ void Sensors::updateWheelCounts() {
     // Currently, the counts are updated directly by interrupts
 }
 
-// Read and convert IMU data
-void Sensors::readIMU() {
-    if (!imuInitialized) {
-        return;
-    }
-
-    // Read raw IMU data
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-
-    // Store raw data (for compatibility)
-    accelData[0] = a.acceleration.x * 16384.0 / 9.81;
-    accelData[1] = a.acceleration.y * 16384.0 / 9.81;
-    accelData[2] = a.acceleration.z * 16384.0 / 9.81;
-    gyroData[0] = g.gyro.x * 131.0 / (PI / 180.0);
-    gyroData[1] = g.gyro.y * 131.0 / (PI / 180.0);
-    gyroData[2] = g.gyro.z * 131.0 / (PI / 180.0);
-
-    // Convert accel to m/s²
-    ax = a.acceleration.x;
-    ay = a.acceleration.y;
-    az = a.acceleration.z;
-
-    // Convert gyro to rad/s
-    gx = g.gyro.x;
-    gy = g.gyro.y;
-    gz = g.gyro.z;
-
-    // Store gz sample for averaging
-    unsigned long currentTime = millis();
-    if (currentTime - lastIMUSampleTime >= imuSampleInterval) {
-        gzSamples[sampleIndex] = gz; // Store gz (yaw rate in rad/s)
-        sampleIndex = (sampleIndex + 1) % numSamples; // Increment and wrap around
-        lastIMUSampleTime = currentTime;
-    }
-}
-
-// Calculate robot's angular velocity from IMU (rad/s)
-float Sensors::getAngularVelocityFromIMU() {
-    if (!imuInitialized) {
-        return 0.0f;
-    }
-
-    // Average the stored gz samples
-    float sumGz = 0.0f;
-    for (int i = 0; i < numSamples; i++) {
-        sumGz += gzSamples[i];
-    }
-    return sumGz / numSamples;
-}
 
 // Calculate robot's angular velocity from odometry (rad/s)
 float Sensors::getAngularVelocityFromOdometry() {
@@ -214,6 +188,16 @@ float Sensors::getRightWheelVelocity() {
     return rightWheelVelocity;
 }
 
+// Set the communication object for sending data
+void Sensors::setCommunication(Communication* comm) {
+    communication = comm;
+}
+
+// Set the motors object for accessing motor control values
+void Sensors::setMotors(Motors* m) {
+    motors = m;
+}
+
 // Update the Kalman filter with the latest sensor readings
 void Sensors::updateKalmanFilter() {
     unsigned long currentTime = millis();
@@ -237,10 +221,31 @@ void Sensors::updateKalmanFilter() {
         }
         lastAccelTime = currentTime;
 
-        // Dummy values for commanded accelerations
-        // In a real implementation, these would come from the motor control commands
-        float alpha_cmd = 0.05f; // Angular acceleration command [rad/s²]
-        float a_cmd = 0.2f;      // Linear acceleration command [m/s²]
+        // Calculate commanded accelerations from motor control values
+        float alpha_cmd = 0.0f; // Angular acceleration command [rad/s²]
+        float a_cmd = 0.0f;     // Linear acceleration command [m/s²]
+
+        // Use motor control values if motors object is available
+        if (motors != nullptr) {
+            // Get current PWM values (now consistent between V0 and V1)
+            int leftPwm = motors->getCurrentPwmLeft();
+            int rightPwm = motors->getCurrentPwmRight();
+
+            // Calculate linear and angular acceleration commands
+            // Scale PWM values (0-255) to acceleration values
+            float maxAccel = 1.0f; // Maximum acceleration in m/s²
+            float maxAngularAccel = 2.0f; // Maximum angular acceleration in rad/s²
+
+            // Linear acceleration is proportional to the average of left and right PWM
+            a_cmd = ((leftPwm + rightPwm) / 2.0f) / 255.0f * maxAccel;
+
+            // Angular acceleration is proportional to the difference between right and left PWM
+            alpha_cmd = (rightPwm - leftPwm) / 255.0f * maxAngularAccel / wheelBase;
+        } else {
+            // Fallback to default values if motors object is not available
+            alpha_cmd = 0.05f;
+            a_cmd = 0.2f;
+        }
 
         // Update Kalman filters
         kalmanFilter.predictAngular(alpha_cmd);
@@ -270,6 +275,36 @@ void Sensors::updateKalmanFilter() {
             kalmanFilter.setHighUncertainty(false);
         }
 
+        // Get the fused angular velocity
+        float w_fused = kalmanFilter.getAngularVelocity();
+
+        // Send the three angular velocity values if communication is available
+        if (communication != nullptr) {
+            // Send wheel encoder angular velocity
+            communication->sendData("e" + String(w_wheel, 6));
+
+            // Send IMU angular velocity (x-axis)
+            communication->sendData("i" + String(w_imu, 6));
+
+            // Send fused angular velocity
+            communication->sendData("k" + String(w_fused, 6));
+
+            // Send current PWM values if motors object is available
+            if (motors != nullptr) {
+                // Get current PWM values
+                int leftPwm = motors->getCurrentPwmLeft();
+                int rightPwm = motors->getCurrentPwmRight();
+
+                // Send PWM values with prefix "p"
+                communication->sendData("p" + String(leftPwm) + "," + String(rightPwm));
+            }
+
+            // Send current wheel counts with prefix "c"
+            unsigned int leftCount = getLeftWheelCount();
+            unsigned int rightCount = getRightWheelCount();
+            communication->sendData("c" + String(leftCount) + "," + String(rightCount));
+        }
+
         lastKalmanUpdateTime = currentTime;
     }
 }
@@ -284,4 +319,112 @@ float Sensors::getFusedAngularVelocity() {
 float Sensors::getFusedLinearVelocity() {
     updateKalmanFilter(); // Make sure we have the latest estimate
     return kalmanFilter.getLinearVelocity();
+}
+
+// Read raw IMU data
+void Sensors::readIMU() {
+    if (!imuInitialized) {
+        return;
+    }
+
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+
+    // Apply bias correction to accelerometer readings
+    ax = a.acceleration.x - 9.81 - ax_bias; // Subtract gravity from x-axis (up-axis for SatiBot)
+    ay = a.acceleration.y - ay_bias;
+    az = a.acceleration.z - az_bias;
+
+    // Apply bias correction to gyroscope readings
+    gx = g.gyro.x - gx_bias;
+    gy = g.gyro.y - gy_bias;
+    gz = g.gyro.z - gz_bias;
+}
+
+// Update IMU reading - called by timer every 2ms
+void Sensors::updateIMUReading() {
+    if (!imuInitialized) {
+        return;
+    }
+
+    unsigned long currentTime = millis();
+
+    // Read the IMU data
+    readIMU();
+
+    // Store the gyro x value in the circular buffer
+    gxSamples[sampleIndex] = gx;
+    sampleIndex = (sampleIndex + 1) % IMU_BUFFER_SIZE;
+}
+
+// Get angular velocity from IMU (rad/s)
+float Sensors::getAngularVelocityFromIMU() {
+    if (!imuInitialized) {
+        return 0.0f;
+    }
+
+    static float lastAvgGx = 0.0f;
+    unsigned long currentTime = millis();
+
+    // Calculate average at the update interval
+    float sumGx = 0.0f;
+
+    // Sum all samples in the buffer
+    for (int i = 0; i < IMU_BUFFER_SIZE; i++) {
+        sumGx += gxSamples[i];
+    }
+
+    // Calculate average
+    float avgGx = sumGx / IMU_BUFFER_SIZE;
+
+    // Store for return between updates
+    lastAvgGx = avgGx;
+
+    // Update timestamp
+    lastUpdateTime = currentTime;
+
+    // zero out the gxSamples
+    for (int i = 0; i < IMU_BUFFER_SIZE; i++) {
+        gxSamples[i] = 0.0f;
+    }
+
+    return avgGx;
+}
+
+// Calibrate IMU to estimate biases for all axes
+void Sensors::calibrateIMU() {
+    if (!imuInitialized) {
+        return;
+    }
+
+    const int calibSamples = 100;
+    float axSum = 0.0, aySum = 0.0, azSum = 0.0;
+    float gxSum = 0.0, gySum = 0.0, gzSum = 0.0;
+
+    // Take multiple samples to get stable bias estimates
+    for (int i = 0; i < calibSamples; i++) {
+        sensors_event_t a, g, temp;
+        mpu.getEvent(&a, &g, &temp);
+
+        // Sum accelerometer readings (x-axis is now the up-axis)
+        axSum += a.acceleration.x - 9.81; // Subtract gravity from x-axis
+        aySum += a.acceleration.y;
+        azSum += a.acceleration.z;
+
+        // Sum gyroscope readings
+        gxSum += g.gyro.x;
+        gySum += g.gyro.y;
+        gzSum += g.gyro.z;
+
+        delay(10);
+    }
+
+    // Calculate average biases
+    ax_bias = axSum / calibSamples;
+    ay_bias = aySum / calibSamples;
+    az_bias = azSum / calibSamples;
+
+    gx_bias = gxSum / calibSamples;
+    gy_bias = gySum / calibSamples;
+    gz_bias = gzSum / calibSamples;
 }

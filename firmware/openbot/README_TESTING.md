@@ -69,8 +69,7 @@ Submodes:
 
 Displays configuration information for different robot types.
 
-- Shows configuration details for DIY with SATIBOT_V0
-- Shows configuration details for DIY with SATIBOT_V1
+- Shows configuration details for DIY
 - Shows configuration details for DIY_ESP32
 - Press any key to cycle through configurations
 - Enter 0 to return to main menu

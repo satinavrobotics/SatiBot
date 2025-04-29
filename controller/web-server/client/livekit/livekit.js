@@ -52,6 +52,15 @@ export function LiveKitClient() {
     // setup buttons
   }
 
+  const checkParticipantAvailable = (identity) => {
+    for (const [_, participant] of room.remoteParticipants) {
+      if (participant.identity === identity) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   const connectToRoom = async (url, token) => {
     // pre-warm connection, this can be called as early as your page is loaded
     room.prepareConnection(url, token);
@@ -60,6 +69,12 @@ export function LiveKitClient() {
     .then(() => {
       console.log('Connected to room:', room.name);
       const tryPerformRpc = () => {
+        if (!checkParticipantAvailable('Android')) {
+          console.log("Android participant not available, retrying in 10s...");
+          setTimeout(tryPerformRpc, 10000);
+          return;
+        }
+
         const payload_json = {"command": "CONNECTED"};
         const payload = JSON.stringify(payload_json);
         room.localParticipant.performRpc({
@@ -96,6 +111,11 @@ export function LiveKitClient() {
       return
     }
 
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot send drive command: Android participant not available");
+      return;
+    }
+
     msg = JSON.stringify({driveCmd: msg})
     console.log(msg)
     // publish to topic
@@ -105,13 +125,18 @@ export function LiveKitClient() {
       payload: msg,
     }).then(response => {
     }).catch(error => {
-        console.log("Error sending camera switch request: " + error );
+        console.log("Error sending drive command request: " + error );
     });
   }
 
   this.sendCommand = (msg) => {
     if (msg === undefined || msg === null) {
       return
+    }
+
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot send command: Android participant not available");
+      return;
     }
 
     msg = JSON.stringify({command: msg})
@@ -123,11 +148,16 @@ export function LiveKitClient() {
       payload: msg,
     }).then(response => {
     }).catch(error => {
-        console.log("Error sending camera switch request: " + error );
+        console.log("Error sending command request: " + error );
     });
   }
 
   this.switchCamera = (camera_id) => {
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot switch camera: Android participant not available");
+      return;
+    }
+
     let payload = camera_id.toString();
     room.localParticipant.performRpc({
       destinationIdentity: 'Android',
@@ -141,6 +171,11 @@ export function LiveKitClient() {
 
 
   this.switchFlashlight = () => {
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot switch flashlight: Android participant not available");
+      return Promise.reject("Android participant not available");
+    }
+
     return room.localParticipant.performRpc({
       destinationIdentity: 'Android',
       method: 'switch-flashlight',
@@ -149,6 +184,16 @@ export function LiveKitClient() {
   }
 
   this.getVehicleStatus = async () => {
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot get vehicle status: Android participant not available");
+      return {
+        lat: 0,
+        lng: 0,
+        bearing: 0,
+        recording: false
+      };
+    }
+
     const response = await room.localParticipant.performRpc({
       destinationIdentity: 'Android',
       method: 'status',
@@ -160,12 +205,29 @@ export function LiveKitClient() {
     let update_loc = {
       lat: location.latitude,
       lng: location.longitude,
+      bearing: location.bearing,
       recording: status.LOGS
     }
     return update_loc;
   }
 
-  
+  this.sendWaypointCommand = async (waypoints) => {
+    if (!checkParticipantAvailable('Android')) {
+      console.log("Cannot send waypoint command: Android participant not available");
+      return false;
+    }
+
+    // payload: {"waypoints": [{}, {}, {}]}
+    const response = await room.localParticipant.performRpc({
+      destinationIdentity: 'Android',
+      method: 'waypoint-cmd',
+      payload: JSON.stringify(waypoints),
+    })
+    if (response == "0")
+      return true;
+    else
+      return false;
+  }
 
   this.setupListeners = () => {
     room.on(RoomEvent.TrackSubscribed, async (track, publication, participant) => {
