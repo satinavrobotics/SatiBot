@@ -35,7 +35,6 @@ public class ConnectionUtils {
 
   public static JSONObject getStatus(
       boolean loggingEnabled,
-      boolean noiseEnabled,
       boolean networkEnabled,
       String driveMode,
       int indicator) {
@@ -44,7 +43,6 @@ public class ConnectionUtils {
       JSONObject statusValue = new JSONObject();
 
       statusValue.put("LOGS", loggingEnabled);
-      statusValue.put("NOISE", noiseEnabled);
       statusValue.put("NETWORK", networkEnabled);
       statusValue.put("DRIVE_MODE", driveMode);
 

@@ -22,7 +22,7 @@
     <PreferenceCategory app:title="Video Streaming">
 
         <ListPreference
-            app:defaultValue="RTSP"
+            app:defaultValue="LiveKit"
             app:entries="@array/stream_server"
             app:entryValues="@array/stream_server"
             app:key="video_server"

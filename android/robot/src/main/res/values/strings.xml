@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <resources>
-    <string name="app_name">OpenBot</string>
-    <string name="activity_name">OpenBot</string>
+    <string name="app_name">SatiBot</string>
+    <string name="activity_name">SatiBot</string>
     <string name="description_info">Info</string>
     <string name="camera_error">This device doesn\'t support Camera2 API.</string>
     <string name="threads">Threads</string>
@@ -157,6 +157,7 @@
     <string-array name="stream_server">
         <item>WebRTC</item>
         <item>RTSP</item>
+        <item>LiveKit</item>
     </string-array>
     <string-array name="connection_type">
         <item>Bluetooth</item>
@@ -207,4 +208,20 @@
     <string name="front_leds">Front LEDs</string>
     <string name="usb">USB</string>
     <string name="cancel">Cancel</string>
+    <string name="local_control">Local Control</string>
+    <string name="debug">Debug</string>
+
+    <string-array name="bluetooth_drive_modes">
+        <item>Dual Pedals</item>
+        <item>Tilt to Steer</item>
+        <item>Wheel + Pedal</item>
+    </string-array>
+    <string name="wheel_encoder_angular_velocity">Wheel Encoder Angular Velocity</string>
+    <string name="imu_angular_velocity">IMU Angular Velocity</string>
+    <string name="fused_angular_velocity">Fused Angular Velocity</string>
+    <string name="angular_velocity_format">%1$s rad/s</string>
+    <string name="current_pwm">Current PWM (l,r)</string>
+    <string name="pwm_format">%1$s,%2$s</string>
+    <string name="wheel_count">Wheel Count (l,r)</string>
+    <string name="wheel_count_format">%1$s,%2$s</string>
 </resources>

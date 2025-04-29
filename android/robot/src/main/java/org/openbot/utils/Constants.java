@@ -5,6 +5,10 @@ import android.Manifest;
 public class Constants {
 
   public static final String DEVICE_ACTION_DATA_RECEIVED = "device.data_received";
+  public static final String DEVICE_ACTION_USB_CONNECTED = "device.usb_connected";
+  public static final String DEVICE_ACTION_USB_DISCONNECTED = "device.usb_disconnected";
+  public static final String DEVICE_ACTION_BLE_CONNECTED = "device.ble_connected";
+  public static final String DEVICE_ACTION_BLE_DISCONNECTED = "device.ble_disconnected";
   public static final int REQUEST_CAMERA_PERMISSION = 1;
   public static final int REQUEST_AUDIO_PERMISSION = 2;
   public static final int REQUEST_STORAGE_PERMISSION = 3;
@@ -34,9 +38,7 @@ public class Constants {
 
   // Controller Commands
   public static final String CMD_DRIVE = "DRIVE_CMD";
-  public static final String WAYPT_DRIVE = "WAYPT_CMD";
   public static final String CMD_LOGS = "LOGS";
-  public static final String CMD_NOISE = "NOISE";
   public static final String CMD_INDICATOR_LEFT = "INDICATOR_LEFT";
   public static final String CMD_INDICATOR_RIGHT = "INDICATOR_RIGHT";
   public static final String CMD_INDICATOR_STOP = "INDICATOR_STOP";
@@ -46,5 +48,6 @@ public class Constants {
   public static final String CMD_DISCONNECTED = "DISCONNECTED";
   public static final String CMD_SPEED_UP = "SPEED_UP";
   public static final String CMD_SPEED_DOWN = "SPEED_DOWN";
+  public static final String CMD_WAYPOINTS = "WAYPOINTS";
   // endregion
 }

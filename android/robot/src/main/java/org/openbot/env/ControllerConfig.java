@@ -10,7 +10,8 @@ public class ControllerConfig {
 
   enum VIDEO_SERVER_TYPE {
     WEBRTC,
-    RTSP
+    RTSP,
+    LIVEKIT
   }
 
   private String currentServerType;
@@ -27,7 +28,7 @@ public class ControllerConfig {
 
   void init(Context context) {
     preferences = PreferenceManager.getDefaultSharedPreferences(context);
-    currentServerType = get("video_server", "WEBRTC");
+    currentServerType = get("video_server", "LIVEKIT");
   }
 
   private void set(String name, String value) {
@@ -59,7 +60,7 @@ public class ControllerConfig {
   }
 
   public String getVideoServerType() {
-    return get("video_server", "WEBRTC");
+    return get("video_server", "LIVEKIT");
   }
 
   public void setVideoServerType(String type) {

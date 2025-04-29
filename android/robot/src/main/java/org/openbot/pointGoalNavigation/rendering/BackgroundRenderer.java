@@ -16,7 +16,9 @@ package org.openbot.pointGoalNavigation.rendering;
 
 import android.content.Context;
 import android.opengl.GLES11Ext;
-import android.opengl.GLES20;
+import android.opengl.GLES30;
+import android.opengl.GLES30;
+
 import androidx.annotation.NonNull;
 import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
@@ -25,6 +27,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+
+import timber.log.Timber;
 
 /**
  * This class renders the AR background from camera feed. It creates and hosts the texture given to
@@ -66,14 +70,14 @@ public class BackgroundRenderer {
   public void createOnGlThread(Context context) throws IOException {
     // Generate the background texture.
     int[] textures = new int[1];
-    GLES20.glGenTextures(1, textures, 0);
+    GLES30.glGenTextures(1, textures, 0);
     textureId = textures[0];
     int textureTarget = GLES11Ext.GL_TEXTURE_EXTERNAL_OES;
-    GLES20.glBindTexture(textureTarget, textureId);
-    GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-    GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-    GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR);
-    GLES20.glTexParameteri(textureTarget, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR);
+    GLES30.glBindTexture(textureTarget, textureId);
+    GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE);
+    GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE);
+    GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
+    GLES30.glTexParameteri(textureTarget, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
 
     int numVertices = 4;
     if (numVertices != QUAD_COORDS.length / COORDS_PER_VERTEX) {
@@ -92,20 +96,20 @@ public class BackgroundRenderer {
     quadTexCoords = bbTexCoordsTransformed.asFloatBuffer();
 
     int vertexShader =
-        ShaderUtil.loadGLShader(TAG, context, GLES20.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
+        ShaderUtil.loadGLShader(TAG, context, GLES30.GL_VERTEX_SHADER, VERTEX_SHADER_NAME);
     int fragmentShader =
-        ShaderUtil.loadGLShader(TAG, context, GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
+        ShaderUtil.loadGLShader(TAG, context, GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER_NAME);
 
-    quadProgram = GLES20.glCreateProgram();
-    GLES20.glAttachShader(quadProgram, vertexShader);
-    GLES20.glAttachShader(quadProgram, fragmentShader);
-    GLES20.glLinkProgram(quadProgram);
-    GLES20.glUseProgram(quadProgram);
+    quadProgram = GLES30.glCreateProgram();
+    GLES30.glAttachShader(quadProgram, vertexShader);
+    GLES30.glAttachShader(quadProgram, fragmentShader);
+    GLES30.glLinkProgram(quadProgram);
+    GLES30.glUseProgram(quadProgram);
 
     ShaderUtil.checkGLError(TAG, "Program creation");
 
-    quadPositionParam = GLES20.glGetAttribLocation(quadProgram, "a_Position");
-    quadTexCoordParam = GLES20.glGetAttribLocation(quadProgram, "a_TexCoord");
+    quadPositionParam = GLES30.glGetAttribLocation(quadProgram, "a_Position");
+    quadTexCoordParam = GLES30.glGetAttribLocation(quadProgram, "a_TexCoord");
 
     ShaderUtil.checkGLError(TAG, "Program parameters");
   }
@@ -151,37 +155,74 @@ public class BackgroundRenderer {
     // Ensure position is rewound before use.
     quadTexCoords.position(0);
 
+    // Debug: Check if the shader program is valid
+    int[] linked = new int[1];
+    GLES30.glGetProgramiv(quadProgram, GLES30.GL_LINK_STATUS, linked, 0);
+    if (linked[0] == 0) {
+      String log = GLES30.glGetProgramInfoLog(quadProgram);
+      Timber.e(TAG, "Shader program linking failed: " + log);
+      return;
+    }
+
+    // Debug: Ensure valid texture ID
+    if (textureId == 0) {
+      Timber.e(TAG, "Invalid texture ID!");
+      return;
+    }
+
     // No need to test or write depth, the screen quad has arbitrary depth, and is expected
     // to be drawn first.
-    GLES20.glDisable(GLES20.GL_DEPTH_TEST);
-    GLES20.glDepthMask(false);
+    GLES30.glDisable(GLES30.GL_DEPTH_TEST);
+    GLES30.glDepthMask(false);
 
-    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-    GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId);
+    GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+    GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId);
 
-    GLES20.glUseProgram(quadProgram);
+    GLES30.glUseProgram(quadProgram);
+
+    quadPositionParam = GLES30.glGetAttribLocation(quadProgram, "a_Position");
+    quadTexCoordParam = GLES30.glGetAttribLocation(quadProgram, "a_TexCoord");
+    if (quadPositionParam < 0 || quadTexCoordParam < 0) {
+      Timber.e(TAG, "Invalid attribute locations: Position = " + quadPositionParam +
+              ", TexCoord = " + quadTexCoordParam);
+      return;
+    }
+
+    // Debug: Ensure texture uniform is valid
+    int textureUniform = GLES30.glGetUniformLocation(quadProgram, "sTexture");
+    if (textureUniform == -1) {
+      Timber.e(TAG, "Uniform sTexture not found in shader!");
+      return;
+    }
+    GLES30.glUniform1i(textureUniform, 0);
 
     // Set the vertex positions.
-    GLES20.glVertexAttribPointer(
-        quadPositionParam, COORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, quadCoords);
+    GLES30.glVertexAttribPointer(
+        quadPositionParam, COORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, quadCoords);
 
     // Set the texture coordinates.
-    GLES20.glVertexAttribPointer(
-        quadTexCoordParam, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, quadTexCoords);
+    GLES30.glVertexAttribPointer(
+        quadTexCoordParam, TEXCOORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, quadTexCoords);
 
     // Enable vertex arrays
-    GLES20.glEnableVertexAttribArray(quadPositionParam);
-    GLES20.glEnableVertexAttribArray(quadTexCoordParam);
+    GLES30.glEnableVertexAttribArray(quadPositionParam);
+    GLES30.glEnableVertexAttribArray(quadTexCoordParam);
 
-    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+    // Debug: Ensure buffers are direct buffers
+    if (!quadCoords.isDirect() || !quadTexCoords.isDirect()) {
+      Timber.e(TAG, "Buffers must be direct!");
+      return;
+    }
+
+    GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
 
     // Disable vertex arrays
-    GLES20.glDisableVertexAttribArray(quadPositionParam);
-    GLES20.glDisableVertexAttribArray(quadTexCoordParam);
+    GLES30.glDisableVertexAttribArray(quadPositionParam);
+    GLES30.glDisableVertexAttribArray(quadTexCoordParam);
 
     // Restore the depth state for further drawing.
-    GLES20.glDepthMask(true);
-    GLES20.glEnable(GLES20.GL_DEPTH_TEST);
+    GLES30.glDepthMask(true);
+    GLES30.glEnable(GLES30.GL_DEPTH_TEST);
 
     ShaderUtil.checkGLError(TAG, "BackgroundRendererDraw");
   }

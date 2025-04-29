@@ -137,6 +137,10 @@ public class BluetoothManager {
           adapter.notifyDataSetChanged();
           addDeviceInfoDataAndUpdate();
           Logger.i("Successfully connected: " + " " + device);
+
+          // Broadcast BLE connected event
+          localBroadcastManager.sendBroadcast(
+              new Intent(Constants.DEVICE_ACTION_BLE_CONNECTED));
         }
 
         @Override
@@ -144,6 +148,10 @@ public class BluetoothManager {
           bleDevice = null;
           adapter.notifyDataSetChanged();
           Logger.i("disconnected!");
+
+          // Broadcast BLE disconnected event
+          localBroadcastManager.sendBroadcast(
+              new Intent(Constants.DEVICE_ACTION_BLE_DISCONNECTED));
         }
 
         @Override

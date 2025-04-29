@@ -1,7 +1,9 @@
 package org.openbot.vehicle;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import androidx.annotation.NonNull;
 import androidx.preference.PreferenceManager;
 import com.ficat.easyble.BleDevice;
@@ -13,12 +15,10 @@ import org.openbot.env.GameController;
 import org.openbot.env.SensorReading;
 import org.openbot.main.CommonRecyclerViewAdapter;
 import org.openbot.main.ScanDeviceAdapter;
+import org.openbot.utils.Constants;
 import org.openbot.utils.Enums;
 
 public class Vehicle {
-
-  private final Noise noise = new Noise(1000, 2000, 5000);
-  private boolean noiseEnabled = false;
 
   private int indicator = 0;
   private int speedMultiplier = 192; // 128,192,255
@@ -28,6 +28,16 @@ public class Vehicle {
   private final SensorReading leftWheelRpm = new SensorReading();
   private final SensorReading rightWheelRpm = new SensorReading();
   private final SensorReading sonarReading = new SensorReading();
+  private final SensorReading wheelEncoderAngularVelocity = new SensorReading();
+  private final SensorReading imuAngularVelocity = new SensorReading();
+  private final SensorReading fusedAngularVelocity = new SensorReading();
+  private final SensorReading leftPwm = new SensorReading();
+  private final SensorReading rightPwm = new SensorReading();
+  private final SensorReading leftWheelCount = new SensorReading();
+  private final SensorReading rightWheelCount = new SensorReading();
+  private final SensorReading headingAdjustment = new SensorReading();
+  private final SensorReading currentHeading = new SensorReading();
+  private final SensorReading targetHeading = new SensorReading();
 
   private float minMotorVoltage = 2.5f;
   private float lowBatteryVoltage = 9.0f;
@@ -52,11 +62,6 @@ public class Vehicle {
   private BluetoothManager bluetoothManager;
   SharedPreferences sharedPreferences;
   public String connectionType;
-  public Waypoints waypoints = new Waypoints();
-
-  public void updateWaypoints(double lat, double lon) {
-    waypoints.updateWaypoints(lat, lon);
-  }
 
   public float getMinMotorVoltage() {
     return minMotorVoltage;
@@ -279,6 +284,86 @@ public class Vehicle {
     this.sonarReading.setReading(sonarReading);
   }
 
+  public float getWheelEncoderAngularVelocity() {
+    return wheelEncoderAngularVelocity.getReading();
+  }
+
+  public void setWheelEncoderAngularVelocity(float wheelEncoderAngularVelocity) {
+    this.wheelEncoderAngularVelocity.setReading(wheelEncoderAngularVelocity);
+  }
+
+  public float getImuAngularVelocity() {
+    return imuAngularVelocity.getReading();
+  }
+
+  public void setImuAngularVelocity(float imuAngularVelocity) {
+    this.imuAngularVelocity.setReading(imuAngularVelocity);
+  }
+
+  public float getFusedAngularVelocity() {
+    return fusedAngularVelocity.getReading();
+  }
+
+  public void setFusedAngularVelocity(float fusedAngularVelocity) {
+    this.fusedAngularVelocity.setReading(fusedAngularVelocity);
+  }
+
+  public float getLeftPwm() {
+    return leftPwm.getReading();
+  }
+
+  public void setLeftPwm(float leftPwm) {
+    this.leftPwm.setReading(leftPwm);
+  }
+
+  public float getRightPwm() {
+    return rightPwm.getReading();
+  }
+
+  public void setRightPwm(float rightPwm) {
+    this.rightPwm.setReading(rightPwm);
+  }
+
+  public float getLeftWheelCount() {
+    return leftWheelCount.getReading();
+  }
+
+  public void setLeftWheelCount(float leftWheelCount) {
+    this.leftWheelCount.setReading(leftWheelCount);
+  }
+
+  public float getRightWheelCount() {
+    return rightWheelCount.getReading();
+  }
+
+  public void setRightWheelCount(float rightWheelCount) {
+    this.rightWheelCount.setReading(rightWheelCount);
+  }
+
+  public float getHeadingAdjustment() {
+    return headingAdjustment.getReading();
+  }
+
+  public void setHeadingAdjustment(float headingAdjustment) {
+    this.headingAdjustment.setReading(headingAdjustment);
+  }
+
+  public float getCurrentHeading() {
+    return currentHeading.getReading();
+  }
+
+  public void setCurrentHeading(float currentHeading) {
+    this.currentHeading.setReading(currentHeading);
+  }
+
+  public float getTargetHeading() {
+    return targetHeading.getReading();
+  }
+
+  public void setTargetHeading(float targetHeading) {
+    this.targetHeading.setReading(targetHeading);
+  }
+
   public Control getControl() {
     return control;
   }
@@ -293,16 +378,11 @@ public class Vehicle {
     sendControl();
   }
 
-  private Timer noiseTimer;
-
-  public void toggleNoise() {
-    if (noiseEnabled) stopNoise();
-    else startNoise();
+  public void setControlVelocity(float linear, float angular) {
+    this.control = new Control(linear, angular, true);
+    sendControl();
   }
 
-  public boolean isNoiseEnabled() {
-    return noiseEnabled;
-  }
 
   public void setDriveMode(Enums.DriveMode driveMode) {
     this.driveMode = driveMode;
@@ -315,27 +395,6 @@ public class Vehicle {
 
   public GameController getGameController() {
     return gameController;
-  }
-
-  private class NoiseTask extends TimerTask {
-    @Override
-    public void run() {
-      noise.update();
-      sendControl();
-    }
-  }
-
-  public void startNoise() {
-    noiseTimer = new Timer();
-    NoiseTask noiseTask = new NoiseTask();
-    noiseTimer.schedule(noiseTask, 0, 50); // no delay 50ms intervals
-    noiseEnabled = true;
-  }
-
-  public void stopNoise() {
-    noiseEnabled = false;
-    noiseTimer.cancel();
-    sendControl();
   }
 
   public int getSpeedMultiplier() {
@@ -376,6 +435,9 @@ public class Vehicle {
       if (heartbeatTimer == null) {
         startHeartbeat();
       }
+      // Broadcast USB connected event
+      LocalBroadcastManager.getInstance(context).sendBroadcast(
+          new Intent(Constants.DEVICE_ACTION_USB_CONNECTED));
     }
   }
 
@@ -386,6 +448,10 @@ public class Vehicle {
       usbConnection.stopUsbConnection();
       usbConnection = null;
       usbConnected = false;
+
+      // Broadcast USB disconnected event
+      LocalBroadcastManager.getInstance(context).sendBroadcast(
+          new Intent(Constants.DEVICE_ACTION_USB_DISCONNECTED));
     }
   }
 
@@ -411,6 +477,14 @@ public class Vehicle {
     return control.getRight() * speedMultiplier;
   }
 
+  public float getLinearVelocity() {
+    return control.getLinear() * speedMultiplier;
+  }
+
+  public float getAngularVelocity() {
+    return control.getAngular() * speedMultiplier;
+  }
+
   public void sendLightIntensity(float frontPercent, float backPercent) {
     int front = (int) (frontPercent * 255.f);
     int back = (int) (backPercent * 255.f);
@@ -418,20 +492,10 @@ public class Vehicle {
   }
 
   public void sendControl() {
-
-    int left = (int) (getLeftSpeed());
-    int right = (int) (getRightSpeed());
-
-    if (noiseEnabled && noise.getDirection() < 0)
-      left =
-          (int)
-              ((control.getLeft() - noise.getValue())
-                  * speedMultiplier); // since noise value does not have speedMultiplier component,
-    // raw control value is used
-    if (noiseEnabled && noise.getDirection() > 0)
-      right = (int) ((control.getRight() - noise.getValue()) * speedMultiplier);
-
-    sendStringToDevice(String.format(Locale.US, "c%d,%d\n", left, right));
+    // Send linear and angular velocity instead of left/right wheel speeds
+    int linear = (int) (getLinearVelocity());
+    int angular = (int) (getAngularVelocity());
+    sendStringToDevice(String.format(Locale.US, "c%d,%d\n", linear, angular));
   }
 
   protected void sendHeartbeat(int timeout_ms) {

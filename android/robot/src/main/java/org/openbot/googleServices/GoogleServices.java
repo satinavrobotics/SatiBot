@@ -13,6 +13,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
+import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.tasks.Task;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.http.ByteArrayContent;
@@ -99,8 +100,9 @@ public class GoogleServices extends Fragment {
                 new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                         .requestEmail()
                         .requestIdToken(
-                                "154487542187-g3aoqeo07p43avsjkppvj2unmq51s38m.apps.googleusercontent.com")
+                                "154487542187-eca7ghfm2vepoaglvjurdalu3c6tntjr.apps.googleusercontent.com")
                         .requestProfile()
+                        .requestScopes(new Scope(DriveScopes.DRIVE_FILE))
                         .build();
         // Set up Shared Preferences
         // Set up Google Sign-In client
@@ -633,6 +635,7 @@ public class GoogleServices extends Fragment {
      * @param zipFile The log data zip file to be uploaded.
      */
     public void uploadLogData(java.io.File zipFile) {
+        Timber.d("Uploading to GOOGLE DRIVE");
         Drive getDriveService = getDriveService();
         String playGroundFolderId = checkPlaygroundFolder();
 

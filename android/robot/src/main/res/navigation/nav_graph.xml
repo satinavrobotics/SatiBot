@@ -20,9 +20,6 @@
             android:id="@+id/action_mainFragment_to_autopilotFragment"
             app:destination="@id/AIFragment" />
         <action
-            android:id="@+id/action_mainFragment_to_controllerMappingFragment"
-            app:destination="@id/controllerMappingFragment" />
-        <action
             android:id="@+id/action_mainFragment_to_objectNavFragment"
             app:destination="@id/objectNavFragment" />
         <action
@@ -40,6 +37,11 @@
         <action
             android:id="@+id/action_mainFragment_to_robotInfoFragment"
             app:destination="@id/robotInfoFragment" />
+        <action
+            android:id="@+id/action_mainFragment_to_mapManagementFragment"
+            app:destination="@id/mapManagementFragment" />
+
+
     </fragment>
     <fragment
         android:id="@+id/freeRoamFragment"
@@ -100,11 +102,6 @@
         android:label="fragment_ai"
         tools:layout="@layout/fragment_autopilot" />
 
-    <fragment
-        android:id="@+id/controllerMappingFragment"
-        android:name="org.openbot.controller.ControllerMappingFragment"
-        android:label="fragment_controller_mapping"
-        tools:layout="@layout/fragment_controller_mapping" />
     <fragment
         android:id="@+id/objectNavFragment"
         android:name="org.openbot.objectNav.ObjectNavFragment"
@@ -171,4 +168,38 @@
         android:id="@+id/robotInfoFragment"
         android:name="org.openbot.robot.RobotInfoFragment"
         android:label="RobotInfoFragment" />
+    <fragment
+        android:id="@+id/mapManagementFragment"
+        android:name="org.openbot.mapManagement.MapManagementFragment"
+        android:label="Map Management"
+        tools:layout="@layout/fragment_map_management">
+        <action
+            android:id="@+id/action_mapManagementFragment_to_mapScanningFragment"
+            app:destination="@id/mapScanningFragment" />
+        <action
+            android:id="@+id/action_mapManagementFragment_to_mapResolvingFragment"
+            app:destination="@id/mapResolvingFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/mapScanningFragment"
+        android:name="org.openbot.mapManagement.MapScanningFragment"
+        android:label="Map Scanning"
+        tools:layout="@layout/fragment_map_scanning" />
+
+    <fragment
+        android:id="@+id/mapResolvingFragment"
+        android:name="org.openbot.mapManagement.MapResolvingFragment"
+        android:label="Map Resolving"
+        tools:layout="@layout/fragment_map_resolving" />
+    <fragment
+        android:id="@+id/localControlFragment"
+        android:name="org.openbot.robot.BluetoothControlFragment"
+        android:label="@string/local_control" />
+
+    <action
+        android:id="@+id/action_mainFragment_to_localControlFragment"
+        app:destination="@id/localControlFragment" />
+
+
 </navigation>

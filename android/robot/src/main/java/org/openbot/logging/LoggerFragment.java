@@ -16,6 +16,10 @@ import android.os.IBinder;
 import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.renderscript.Allocation;
+import android.renderscript.Element;
+import android.renderscript.RenderScript;
+import android.renderscript.ScriptIntrinsicYuvToRGB;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,17 +34,19 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.firebase.auth.FirebaseUser;
 
 import java.io.File;
+import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
 import org.openbot.R;
 import org.openbot.common.CameraFragment;
 import org.openbot.databinding.FragmentLoggerBinding;
-import org.openbot.env.BotToControllerEventBus;
 import org.openbot.env.ImageUtils;
 import org.openbot.googleServices.GoogleServices;
 import org.openbot.projects.GoogleSignInCallback;
@@ -50,16 +56,19 @@ import org.openbot.utils.Constants;
 import org.openbot.utils.Enums;
 import org.openbot.utils.FormatUtils;
 import org.openbot.utils.PermissionUtils;
+import org.webrtc.VideoFrame;
+import org.webrtc.VideoSink;
 import org.zeroturnaround.zip.ZipUtil;
 import org.zeroturnaround.zip.commons.FileUtils;
 import timber.log.Timber;
 
-public class LoggerFragment extends CameraFragment {
+public class LoggerFragment extends CameraFragment implements VideoSink {
 
   private FragmentLoggerBinding binding;
   private Handler handler;
   private HandlerThread handlerThread;
   private Intent intentSensorService;
+  private LocationService sensorStreamService;
   protected String logFolder;
 
   protected boolean loggingEnabled;
@@ -72,6 +81,7 @@ public class LoggerFragment extends CameraFragment {
   private boolean maintainAspectRatio;
   private String saveAs;
   private GoogleServices googleServices;
+  private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
   @Override
   public View onCreateView(
@@ -126,14 +136,8 @@ public class LoggerFragment extends CameraFragment {
           SensorsDialog sensorsDialog = new SensorsDialog();
           sensorsDialog.show(getChildFragmentManager(), sensorsDialog.getTag());
         });
-    binding.controllerContainer.controlMode.setOnClickListener(
-        v -> {
-          Enums.ControlMode controlMode =
-              Enums.ControlMode.getByID(preferencesManager.getControlMode());
-          if (controlMode != null) setControlMode(Enums.switchControlMode(controlMode));
-        });
-    binding.controllerContainer.driveMode.setOnClickListener(
-        v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
+    //binding.controllerContainer.driveMode.setOnClickListener(
+    //    v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
 
     binding.controllerContainer.speedMode.setOnClickListener(
         v ->
@@ -149,7 +153,7 @@ public class LoggerFragment extends CameraFragment {
 
     List<String> models = getModelNames(f -> f.pathType != Model.PATH_TYPE.URL);
     initModelSpinner(binding.modelSpinner, models, "");
-    initServerSpinner(binding.serverSpinner);
+    //initServerSpinner(binding.serverSpinner);
 
     binding.saveAs.setOnItemSelectedListener( new AdapterView.OnItemSelectedListener() {
 
@@ -217,6 +221,7 @@ public class LoggerFragment extends CameraFragment {
           binding.bleToggle.setChecked(vehicle.bleConnected());
           Navigation.findNavController(requireView()).navigate(R.id.open_bluetooth_fragment);
         });
+
   }
 
   @Override
@@ -357,8 +362,13 @@ public class LoggerFragment extends CameraFragment {
   }
 
   private void stopLogging(boolean isCancel) {
+
+    Timber.d("Stopping loggings");
+
     if (sensorConnection != null) requireActivity().unbindService(sensorConnection);
     requireActivity().stopService(intentSensorService);
+
+
 
     // Pack and upload the collected data
     runInBackground(() -> {
@@ -367,9 +377,9 @@ public class LoggerFragment extends CameraFragment {
             switch (saveAs) {
               case "Local" :
               case "Server" :
-                if (!isCancel) serverCommunication.upload(zip(folder));
-                break;
-              case "GoogleDrive" : googleServices.uploadLogData(zip(folder));
+                //if (!isCancel) serverCommunication.upload(zip(folder));
+                //break;
+              case "GoogleDrive" :  googleServices.uploadLogData(zip(folder));
                 break;
             }
             TimeUnit.MILLISECONDS.sleep(500);
@@ -413,7 +423,6 @@ public class LoggerFragment extends CameraFragment {
       stopLogging(loggingCanceled);
       loggingEnabled = false;
     }
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("LOGS", loggingEnabled));
 
     binding.loggerSwitch.setChecked(loggingEnabled);
   }
@@ -542,17 +551,17 @@ public class LoggerFragment extends CameraFragment {
     if (controlMode != null) {
       switch (controlMode) {
         case GAMEPAD:
-          binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_controller);
+          //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_controller);
           disconnectPhoneController();
           break;
         case PHONE:
-          binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_phone);
+          //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_phone);
           if (!PermissionUtils.hasControllerPermissions(requireActivity()))
             requestPermissionLauncher.launch(Constants.PERMISSIONS_CONTROLLER);
           else connectPhoneController();
           break;
         case WEBSERVER:
-          binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_server);
+          //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_server);
           if (!PermissionUtils.hasControllerPermissions(requireActivity()))
             requestPermissionLauncher.launch(Constants.PERMISSIONS_CONTROLLER);
           else connectWebController();
@@ -567,13 +576,13 @@ public class LoggerFragment extends CameraFragment {
     if (driveMode != null) {
       switch (driveMode) {
         case DUAL:
-          binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
+          //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
           break;
         case GAME:
-          binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_game);
+          //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_game);
           break;
         case JOYSTICK:
-          binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_joystick);
+          //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_joystick);
           break;
       }
 
@@ -584,30 +593,30 @@ public class LoggerFragment extends CameraFragment {
   }
 
   private void connectPhoneController() {
-    phoneController.connect(requireContext());
+    //phoneController.connect(requireContext());
     Enums.DriveMode oldDriveMode = currentDriveMode;
     // Currently only dual drive mode supported
     setDriveMode(Enums.DriveMode.DUAL);
-    binding.controllerContainer.driveMode.setAlpha(0.5f);
-    binding.controllerContainer.driveMode.setEnabled(false);
+    //binding.controllerContainer.driveMode.setAlpha(0.5f);
+    //binding.controllerContainer.driveMode.setEnabled(false);
     preferencesManager.setDriveMode(oldDriveMode.getValue());
   }
 
   private void connectWebController() {
-    phoneController.connectWebServer();
+    //phoneController.connectWebServer();
     Enums.DriveMode oldDriveMode = currentDriveMode;
     // Currently only dual drive mode supported
     setDriveMode(Enums.DriveMode.GAME);
-    binding.controllerContainer.driveMode.setAlpha(0.5f);
-    binding.controllerContainer.driveMode.setEnabled(false);
+    //binding.controllerContainer.driveMode.setAlpha(0.5f);
+    //binding.controllerContainer.driveMode.setEnabled(false);
     preferencesManager.setDriveMode(oldDriveMode.getValue());
   }
 
   private void disconnectPhoneController() {
-    phoneController.disconnect();
+    //phoneController.disconnect();
     setDriveMode(Enums.DriveMode.getByID(preferencesManager.getDriveMode()));
-    binding.controllerContainer.driveMode.setEnabled(true);
-    binding.controllerContainer.driveMode.setAlpha(1.0f);
+    //binding.controllerContainer.driveMode.setEnabled(true);
+    //binding.controllerContainer.driveMode.setAlpha(1.0f);
   }
 
   private long frameNum = 0;
@@ -653,4 +662,128 @@ public class LoggerFragment extends CameraFragment {
       }
     }
   }
+
+
+  protected void processFrame(Bitmap bitmap) {
+    ++frameNum;
+    if (binding != null) {
+      if (isAdded())
+        requireActivity()
+                .runOnUiThread(
+                        () ->
+                                binding.frameInfo.setText(
+                                        String.format(Locale.US, "%d x %d", bitmap.getWidth(), bitmap.getHeight())));
+
+      if (!binding.loggerSwitch.isChecked()) return;
+
+      if (binding.previewCheckBox.isChecked() || binding.trainingDataCheckBox.isChecked()) {
+        sendFrameNumberToSensorService(frameNum);
+      }
+
+      if (binding.previewCheckBox.isChecked()) {
+        if (bitmap != null)
+          ImageUtils.saveBitmap(
+                  bitmap, logFolder + File.separator + "images", frameNum + "_preview.jpeg");
+      }
+      if (binding.trainingDataCheckBox.isChecked()) {
+        if (frameToCropTransform == null)
+          frameToCropTransform =
+                  ImageUtils.getTransformationMatrix(
+                          bitmap.getWidth(),
+                          bitmap.getHeight(),
+                          croppedBitmap.getWidth(),
+                          croppedBitmap.getHeight(),
+                          sensorOrientation,
+                          cropRect,
+                          maintainAspectRatio);
+
+        final Canvas canvas = new Canvas(croppedBitmap);
+        canvas.drawBitmap(bitmap, frameToCropTransform, null);
+        ImageUtils.saveBitmap(
+                croppedBitmap, logFolder + File.separator + "images", frameNum + "_crop.jpeg");
+      }
+    }
+  }
+
+  @Override
+  public void onFrame(VideoFrame videoFrame) {
+    if (logFolder == null) return;
+    if (!loggingEnabled) return;
+    executorService.submit(() -> {
+      try {
+        Bitmap bitmap = convertVideoFrameToBitmap(videoFrame, requireContext());
+        processFrame(bitmap);
+      } catch (Exception e) {
+        Timber.e(e, "Error processing frame");
+      }
+    });
+  }
+
+  public Bitmap convertVideoFrameToBitmap(VideoFrame videoFrame, Context context) {
+    // Assume the frame buffer is I420:
+    VideoFrame.Buffer buffer = videoFrame.getBuffer();
+    VideoFrame.I420Buffer i420Buffer;
+
+    if (buffer instanceof VideoFrame.I420Buffer) {
+      // The buffer is already in I420 format
+      i420Buffer = (VideoFrame.I420Buffer) buffer;
+    } else {
+      // Convert the buffer to I420 format
+      i420Buffer = buffer.toI420();
+    }
+
+    if (i420Buffer == null) {
+      return null;
+    }
+
+    int width = i420Buffer.getWidth();
+    int height = i420Buffer.getHeight();
+
+    // Convert I420 buffer to NV21 byte array.
+    // You need to implement this conversion (or use a library like libyuv).
+    byte[] nv21 = convertI420ToNV21(i420Buffer);
+    i420Buffer.release();
+
+    Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+
+    // Use RenderScript to convert NV21 to ARGB Bitmap.
+    RenderScript rs = RenderScript.create(context);
+    ScriptIntrinsicYuvToRGB yuvToRgbIntrinsic =
+            ScriptIntrinsicYuvToRGB.create(rs, Element.U8_4(rs));
+    Allocation in = Allocation.createSized(rs, Element.U8(rs), nv21.length, Allocation.USAGE_SCRIPT);
+    Allocation out = Allocation.createFromBitmap(rs, bitmap);
+    in.copyFrom(nv21);
+    yuvToRgbIntrinsic.setInput(in);
+    yuvToRgbIntrinsic.forEach(out);
+    out.copyTo(bitmap);
+    rs.destroy();
+    return bitmap;
+  }
+
+  // Dummy implementation; you must write proper conversion code.
+  private byte[] convertI420ToNV21(VideoFrame.I420Buffer i420Buffer) {
+    int width = i420Buffer.getWidth();
+    int height = i420Buffer.getHeight();
+    int ySize = width * height;
+    int uvSize = ySize / 4;
+    byte[] nv21 = new byte[ySize + 2 * uvSize];
+
+    // Copy Y plane.
+    i420Buffer.getDataY().get(nv21, 0, ySize);
+
+    // For NV21, the V and U values are interleaved.
+    // I420 has U and V as separate planes.
+    ByteBuffer uBuffer = i420Buffer.getDataU();
+    ByteBuffer vBuffer = i420Buffer.getDataV();
+    byte[] uBytes = new byte[uvSize];
+    byte[] vBytes = new byte[uvSize];
+    uBuffer.get(uBytes);
+    vBuffer.get(vBytes);
+    for (int i = 0; i < uvSize; i++) {
+      nv21[ySize + (i * 2)] = vBytes[i];   // V
+      nv21[ySize + (i * 2) + 1] = uBytes[i]; // U
+    }
+    return nv21;
+  }
+
 }

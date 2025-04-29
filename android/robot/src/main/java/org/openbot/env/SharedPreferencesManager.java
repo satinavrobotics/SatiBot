@@ -42,6 +42,7 @@ public class SharedPreferencesManager {
   private static final String SHEET_EXPANDED = "SHEET_EXPANDED";
   private static final String DELAY = "DELAY";
   private static final String PROJECTS_LIST = "PROJECTS_LIST";
+  private static final String CURRENT_MAP_ID = "CURRENT_MAP_ID";
 
   private final SharedPreferences preferences;
 
@@ -214,5 +215,23 @@ public class SharedPreferencesManager {
       // If the JSON string is null or cannot be deserialized, return an empty ArrayList
       return new ArrayList<>();
     }
+  }
+
+  /**
+   * Set the current selected map ID
+   *
+   * @param mapId The ID of the selected map
+   */
+  public void setCurrentMapId(String mapId) {
+    preferences.edit().putString(CURRENT_MAP_ID, mapId).apply();
+  }
+
+  /**
+   * Get the current selected map ID
+   *
+   * @return The ID of the selected map, or null if no map is selected
+   */
+  public String getCurrentMapId() {
+    return preferences.getString(CURRENT_MAP_ID, null);
   }
 }

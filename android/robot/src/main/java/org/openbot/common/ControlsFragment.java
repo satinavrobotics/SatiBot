@@ -1,6 +1,8 @@
 package org.openbot.common;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -17,22 +19,21 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
-import java.io.File;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.openbot.R;
 import org.openbot.env.AudioPlayer;
-import org.openbot.env.BotToControllerEventBus;
 import org.openbot.env.ControllerToBotEventBus;
 import org.openbot.env.PhoneController;
 import org.openbot.env.SharedPreferencesManager;
+import org.openbot.env.StatusManager;
+import org.openbot.env.WaypointsManager;
 import org.openbot.main.MainViewModel;
-import org.openbot.server.ServerCommunication;
-import org.openbot.server.ServerListener;
 import org.openbot.tflite.Model;
 import org.openbot.utils.ConnectionUtils;
 import org.openbot.utils.Constants;
@@ -44,8 +45,7 @@ import org.openbot.vehicle.Control;
 import org.openbot.vehicle.Vehicle;
 import timber.log.Timber;
 
-public abstract class ControlsFragment extends Fragment implements ServerListener {
-  private static final String NO_SERVER = "No server";
+public abstract class ControlsFragment extends Fragment  {
 
   protected MainViewModel mViewModel;
   protected Vehicle vehicle;
@@ -59,12 +59,36 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
   protected final String voice = "matthew";
   protected List<Model> masterList;
 
-  protected ServerCommunication serverCommunication;
-
-  private ArrayAdapter<String> modelAdapter;
-  private ArrayAdapter<String> serverAdapter;
+  //protected ServerCommunication serverCommunication;
   private Spinner modelSpinner;
   private Spinner serverSpinner;
+
+  private StatusManager statusManager;
+
+  private WaypointsManager waypointsManager;
+
+  private static final long CONTROL_TIMEOUT_MS = 250;
+  private Handler controlTimeoutHandler;
+  private final Runnable controlTimeoutRunnable = new Runnable() {
+    @Override
+    public void run() {
+      // If no new control command has been received within the timeout, stop the vehicle
+      if(vehicle != null) {
+        try {
+          JSONObject driveValue = new JSONObject();
+          driveValue.put("l", 0); // linear velocity
+          driveValue.put("a", 0); // angular velocity
+          JSONObject driveCmd = new JSONObject();
+          driveCmd.put("driveCmd", driveValue);
+          vehicle.setControlVelocity(0, 0);
+          processControllerKeyData(Constants.CMD_DRIVE);
+        } catch (JSONException e) {
+          e.printStackTrace();
+        }
+        Timber.d("Control timeout reached, vehicle stopped.");
+      }
+    }
+  };
 
   @Override
   public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -81,10 +105,15 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
         .addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
     phoneController = PhoneController.getInstance(requireContext());
-
+    waypointsManager = WaypointsManager.getInstance();
+    statusManager = StatusManager.getInstance();
     audioPlayer = new AudioPlayer(requireContext());
     masterList = FileUtils.loadConfigJSONFromAsset(requireActivity());
-    serverCommunication = new ServerCommunication(requireContext(), this);
+    //serverCommunication = new ServerCommunication(requireContext(), this);
+
+    // Initialize control timeout handler
+    controlTimeoutHandler = new Handler(Looper.getMainLooper());
+    resetControlTimer();
 
     requireActivity()
         .getSupportFragmentManager()
@@ -94,7 +123,7 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
             (requestKey, result) -> {
               MotionEvent motionEvent = result.getParcelable(Constants.DATA);
               vehicle.setControl(vehicle.getGameController().processJoystickInput(motionEvent, -1));
-              processControllerKeyData(Constants.CMD_DRIVE);
+              processControlCommand(Constants.CMD_DRIVE);
             });
     requireActivity()
         .getSupportFragmentManager()
@@ -162,7 +191,8 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
                   break;
                 case 's':
                   if (FormatUtils.isNumeric(body)) {
-                    vehicle.setSonarReading(Float.parseFloat(body));
+                    //vehicle.setSonarReading(Float.parseFloat(body));
+
                   }
                   break;
                 case 'w':
@@ -204,10 +234,6 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
         case KeyEvent.KEYCODE_BUTTON_A: // x
           processControllerKeyData(Constants.CMD_LOGS);
           break;
-        case KeyEvent.KEYCODE_BUTTON_START: // options
-          toggleNoise();
-          processControllerKeyData(Constants.CMD_NOISE);
-          break;
         case KeyEvent.KEYCODE_BUTTON_L1:
           processControllerKeyData(Constants.CMD_DRIVE_MODE);
           audioPlayer.playDriveMode(voice, vehicle.getDriveMode());
@@ -237,14 +263,12 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
     ControllerToBotEventBus.subscribe(
         this.getClass().getSimpleName(),
         event -> {
-          Timber.d("event " + event.toString());
+          Timber.d("Event received: " + event.toString());
           String commandType = "";
           if (event.has("command")) {
             commandType = event.getString("command");
           } else if (event.has("driveCmd")) {
             commandType = Constants.CMD_DRIVE;
-          } else if (event.has("WAYPT_CMD")) {
-            commandType = Constants.WAYPT_DRIVE;
           } else if (event.has("server")) {
             for (int i = 0; i < serverSpinner.getAdapter().getCount(); i++) {
               if(event.getString("server").equals("noServerFound")){
@@ -259,20 +283,18 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
             case Constants.CMD_DRIVE:
               JSONObject driveValue = event.getJSONObject("driveCmd");
 
-              vehicle.setControl(
-                  new Control(
-                      Float.parseFloat(driveValue.getString("l")),
-                      Float.parseFloat(driveValue.getString("r"))));
-              break;
-
-            case Constants.WAYPT_DRIVE:
-              // TODO: extract coordinates from message and set as waypoint
-              JSONObject waypointValue = event.getJSONObject("WAYPT_CMD");
-
-              vehicle.updateWaypoints(
-                              Float.parseFloat(waypointValue.getString("lat")),
-                              Float.parseFloat(waypointValue.getString("lon"))
-              );
+              // Check if we have linear and angular velocity (new format)
+              if (driveValue.has("l") && driveValue.has("a")) {
+                vehicle.setControlVelocity(
+                    Float.parseFloat(driveValue.getString("l")),
+                    Float.parseFloat(driveValue.getString("a")));
+              }
+              // Fallback to old format with left and right wheel speeds
+              else if (driveValue.has("l") && driveValue.has("r")) {
+                vehicle.setControl(
+                    Float.parseFloat(driveValue.getString("l")),
+                    Float.parseFloat(driveValue.getString("r")));
+              }
               break;
 
             case Constants.CMD_INDICATOR_LEFT:
@@ -293,37 +315,37 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
               // controller.
               // Other controllers can subscribe to this event as well.
               // That is why we are not calling phoneController.send() here directly.
-              BotToControllerEventBus.emitEvent(
+              statusManager.updateStatus(
                   ConnectionUtils.getStatus(
-                      false, false, false, currentDriveMode.toString(), vehicle.getIndicator()));
+                      false, false, currentDriveMode.toString(), vehicle.getIndicator()));
               break;
 
             case Constants.CMD_DISCONNECTED:
               vehicle.setControl(0, 0);
               break;
+
+            case Constants.CMD_WAYPOINTS:
+              JSONArray waypoints = event.getJSONArray("waypoints");
+              waypointsManager.setWaypoints(waypoints);
+              break;
+
           }
 
-          processControllerKeyData(commandType);
+          processControlCommand(commandType);
         },
         error -> {
-          Log.d(null, "Error occurred in ControllerToBotEventBus: " + error);
+          Timber.d("Error occurred in ControllerToBotEventBus: " + error);
         },
-        event -> event.has("command") || event.has("driveCmd") || event.has("server") || event.has("WAYPT_CMD")// filter out everything else
+        event -> event.has("command") || event.has("driveCmd") || event.has("server") // filter out everything else
         );
   }
 
-  protected void toggleNoise() {
-    vehicle.toggleNoise();
-    BotToControllerEventBus.emitEvent(
-        ConnectionUtils.createStatus("NOISE", vehicle.isNoiseEnabled()));
-    audioPlayer.playNoise(voice, vehicle.isNoiseEnabled());
-  }
 
   private void toggleIndicatorEvent(int value) {
     vehicle.setIndicator(value);
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_LEFT", value == -1));
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_RIGHT", value == 1));
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_STOP", value == 0));
+    statusManager.updateStatus(ConnectionUtils.createStatus("INDICATOR_LEFT", value == -1));
+    statusManager.updateStatus(ConnectionUtils.createStatus("INDICATOR_RIGHT", value == 1));
+    statusManager.updateStatus(ConnectionUtils.createStatus("INDICATOR_STOP", value == 0));
   }
 
   private boolean allGranted = true;
@@ -333,7 +355,7 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
           result -> {
             result.forEach((permission, granted) -> allGranted = allGranted && granted);
 
-            if (allGranted) phoneController.connect(requireContext());
+            if (allGranted) phoneController.connectLiveKitServer();
             else {
               PermissionUtils.showControllerPermissionsToast(requireActivity());
             }
@@ -349,7 +371,6 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
 
   @Override
   public void onResume() {
-    serverCommunication.start();
     super.onResume();
   }
 
@@ -364,7 +385,6 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
   @Override
   public synchronized void onPause() {
     Timber.d("onPause");
-    serverCommunication.stop();
     vehicle.setControl(0, 0);
     super.onPause();
   }
@@ -376,7 +396,7 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
   }
 
   protected void initModelSpinner(Spinner spinner, List<String> models, String selected) {
-    modelAdapter = new ArrayAdapter<>(requireContext(), R.layout.spinner_item, models);
+      ArrayAdapter<String> modelAdapter = new ArrayAdapter<>(requireContext(), R.layout.spinner_item, models);
     modelAdapter.setDropDownViewResource(android.R.layout.simple_dropdown_item_1line);
     modelSpinner = spinner;
     modelSpinner.setAdapter(modelAdapter);
@@ -404,99 +424,24 @@ public abstract class ControlsFragment extends Fragment implements ServerListene
         });
   }
 
-  protected void initServerSpinner(Spinner spinner) {
-    serverAdapter = new ArrayAdapter<>(requireContext(), R.layout.spinner_item);
-    serverAdapter.setDropDownViewResource(android.R.layout.simple_dropdown_item_1line);
-    serverSpinner = spinner;
-    serverSpinner.setAdapter(serverAdapter);
-    serverSpinner.setOnItemSelectedListener(
-        new AdapterView.OnItemSelectedListener() {
-          @Override
-          public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-            String selected = parent.getItemAtPosition(position).toString();
-            if (selected.equals(NO_SERVER)) {
-              serverCommunication.disconnect();
-              if (serverAdapter.getPosition(preferencesManager.getServer()) > -1) {
-                preferencesManager.setServer(selected);
-              }
-            } else {
-              serverCommunication.connect(selected);
-              preferencesManager.setServer(selected);
-            }
-          }
-
-          @Override
-          public void onNothingSelected(AdapterView<?> parent) {
-            serverCommunication.disconnect();
-          }
-        });
-    onServerListChange(serverCommunication.getServers());
-  }
-
-  @Override
-  public void onServerListChange(Set<String> servers) {
-    if (serverAdapter == null) {
-      return;
-    }
-    requireActivity()
-        .runOnUiThread(
-            () -> {
-              serverAdapter.clear();
-              serverAdapter.add(NO_SERVER);
-              serverAdapter.addAll(servers);
-              if (!preferencesManager.getServer().isEmpty()) {
-                serverSpinner.setSelection(
-                    Math.max(0, serverAdapter.getPosition(preferencesManager.getServer())));
-              }
-            });
-  }
-
-  @Override
-  public void onAddModel(String model) {
-    Model item =
-        new Model(
-            masterList.size() + 1,
-            Model.CLASS.AUTOPILOT,
-            Model.TYPE.CMDNAV,
-            model,
-            Model.PATH_TYPE.FILE,
-            requireActivity().getFilesDir() + File.separator + model,
-            "256x96");
-
-    if (modelAdapter != null && modelAdapter.getPosition(model) == -1) {
-      modelAdapter.add(model);
-      masterList.add(item);
-      FileUtils.updateModelConfig(requireActivity(), requireContext(),masterList,false);
-    } else {
-      if (model.equals(modelSpinner.getSelectedItem())) {
-        setModel(item);
-      }
-    }
-    Toast.makeText(
-            requireContext().getApplicationContext(),
-            "AutopilotModel added: " + model,
-            Toast.LENGTH_SHORT)
-        .show();
-  }
-
-  @Override
-  public void onRemoveModel(String model) {
-    if (modelAdapter != null && modelAdapter.getPosition(model) != -1) {
-      modelAdapter.remove(model);
-    }
-    Toast.makeText(
-            requireContext().getApplicationContext(),
-            "AutopilotModel removed: " + model,
-            Toast.LENGTH_SHORT)
-        .show();
-  }
-
-  @Override
-  public void onConnectionEstablished(String ipAddress) {}
 
   protected void setModel(Model model) {}
 
   protected abstract void processControllerKeyData(String command);
 
   protected abstract void processUSBData(String data);
+
+  protected void resetControlTimer() {
+    controlTimeoutHandler.removeCallbacks(controlTimeoutRunnable);
+    controlTimeoutHandler.postDelayed(controlTimeoutRunnable, CONTROL_TIMEOUT_MS);
+  }
+
+  protected final void processControlCommand(String command) {
+    processControllerKeyData(command);
+    resetControlTimer();
+  }
+
+  protected final JSONObject getNextWaypointInLocalCoordinates() {
+    return waypointsManager.getNextWaypointInLocalCoordinates();
+  }
 }
