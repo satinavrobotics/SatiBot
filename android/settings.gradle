@@ -1,2 +1,9 @@
 include ':robot', ':controller'
 include ':comlib'
+
+dependencyResolutionManagement {
+    repositories {
+        //...
+        maven { url 'https://jitpack.io' }
+    }
+}
