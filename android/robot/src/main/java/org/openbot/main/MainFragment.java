@@ -44,12 +44,12 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
 
   @Override
   public void onItemClick(SubCategory subCategory) {
-
     Timber.d("onItemClick: %s", subCategory.getTitle());
 
     switch (subCategory.getTitle()) {
-      case FeatureList.PROJECTS:
-        Navigation.findNavController(requireView()).navigate(R.id.projectsFragment);
+      case FeatureList.LOCAL_CONTROL:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_localControlFragment);
         break;
       case FeatureList.FREE_ROAM:
         Navigation.findNavController(requireView())
@@ -62,20 +62,16 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
         break;
 
       case FeatureList.CONTROLLER:
-        // For a library module, uncomment the following line
-        // intent = new Intent(this, ControllerActivity.class);
-        // startActivity(intent);
-        break;
-
-      case FeatureList.CONTROLLER_MAPPING:
         Navigation.findNavController(requireView())
-            .navigate(R.id.action_mainFragment_to_controllerMappingFragment);
+            .navigate(R.id.action_mainFragment_to_localControlFragment);
         break;
 
       case FeatureList.ROBOT_INFO:
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_robotInfoFragment);
         break;
+
+
 
       case FeatureList.AUTOPILOT:
         Navigation.findNavController(requireView())
@@ -96,6 +92,12 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_modelManagementFragment);
         break;
+
+      case FeatureList.MAP_MANAGEMENT:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_mapManagementFragment);
+        break;
+
 
       case FeatureList.DEFAULT:
         Intent intent = new Intent(requireActivity(), DefaultActivity.class);

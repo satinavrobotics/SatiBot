@@ -27,10 +27,15 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.openbot.R;
 import org.openbot.env.Logger;
 import org.openbot.env.SharedPreferencesManager;
 import org.openbot.utils.Enums;
+
+import timber.log.Timber;
 
 public class SensorService extends Service implements SensorEventListener {
   private SensorManager sensorManager;
@@ -201,7 +206,7 @@ public class SensorService extends Service implements SensorEventListener {
     appendLog(inferenceLog, "frame, inferenceTime [ns]");
 
     ctrlLog = openLog(logFolder, "ctrlLog.txt");
-    appendLog(ctrlLog, "timestamp[ns],leftCtrl,rightCtrl");
+    appendLog(ctrlLog, "timestamp[ns],linearVelocity,angularVelocity");
 
     indicatorLog = openLog(logFolder, "indicatorLog.txt");
     appendLog(indicatorLog, "timestamp[ns],signal");
@@ -224,22 +229,36 @@ public class SensorService extends Service implements SensorEventListener {
             Location location = locationResult.getLastLocation();
             if (location != null) {
               appendLog(
-                  gpsLog,
-                  location.getElapsedRealtimeNanos()
-                      + ","
-                      + location.getLatitude()
-                      + ","
-                      + location.getLongitude()
-                      + ","
-                      + location.getAltitude()
-                      + ","
-                      + location.getBearing()
-                      + ","
-                      + location.getSpeed());
+                      gpsLog,
+                      location.getElapsedRealtimeNanos()
+                              + ","
+                              + location.getLatitude()
+                              + ","
+                              + location.getLongitude()
+                              + ","
+                              + location.getAltitude()
+                              + ","
+                              + location.getBearing()
+                              + ","
+                              + location.getSpeed());
+              // Note: added this line, might make processing slower
+              JSONObject loc, status;
+              try {
+                loc = new JSONObject();
+                loc.put("latitude", location.getLatitude());
+                loc.put("longitude", location.getLongitude());
+                loc.put("altitude", location.getAltitude());
+                loc.put("bearing", location.getBearing());
+                loc.put("speed", location.getSpeed());
+                status = new JSONObject().put("LOCATION", loc);
+              } catch (JSONException e) {
+                throw new RuntimeException(e);
+              }
+              Timber.d("Location: " + location.toString());
             }
           }
-        };
 
+      };
     startTrackingLocation();
     hasStarted = true;
 
@@ -409,7 +428,7 @@ public class SensorService extends Service implements SensorEventListener {
           long inferenceTime = msg.getData().getLong("inferenceTime");
           if (inferenceLog != null) appendLog(inferenceLog, frameNumber + "," + inferenceTime);
         } else if (msg.what == MSG_CONTROL) {
-          // msg.arg1 and msg.arg2 contain left and right control signals respectively
+          // msg.arg1 and msg.arg2 contain linear and angular velocity respectively
           if (ctrlLog != null)
             appendLog(
                 ctrlLog, SystemClock.elapsedRealtimeNanos() + "," + msg.arg1 + "," + msg.arg2);

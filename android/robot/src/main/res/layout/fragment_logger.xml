@@ -58,7 +58,7 @@
             app:layout_constraintBottom_toBottomOf="@+id/logger_switch"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@+id/logger_switch"
-            app:tint="@color/openBotBlue" />
+            app:tint="@color/satiBotRed" />
 
         <androidx.appcompat.widget.SwitchCompat
             android:id="@+id/logger_switch"

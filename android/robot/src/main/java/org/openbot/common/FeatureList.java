@@ -23,6 +23,7 @@ public class FeatureList {
   public static final String GAME = "Game";
   public static final String FREE_ROAM = "Free Roam";
   public static final String AR_MODE = "AR Mode";
+  public static final String LOCAL_CONTROL = "Local Control";
 
   // Data Collection
   public static final String DATA_COLLECTION = "Data Collection";
@@ -63,6 +64,11 @@ public class FeatureList {
   public static final String SENSORS_FROM_CAR = "Sensors from Car";
   public static final String SENSORS_FROM_PHONE = "Sensors from Phone";
   public static final String MAP_VIEW = "Map View";
+
+  // Maps
+  public static final String MAPS = "Maps";
+  public static final String MAP_MANAGEMENT = "Map Management";
+  // Removed MAP_RESOLVE as it's now handled from MapManagementFragment
   // endregion
 
   @NotNull
@@ -75,7 +81,7 @@ public class FeatureList {
     subCategories.add(new SubCategory(FREE_ROAM, R.drawable.ic_game, "#FFFF6D00"));
 
     subCategories.add(new SubCategory(DATA_COLLECTION, R.drawable.ic_storage, "#93C47D"));
-    subCategories.add(new SubCategory(CONTROLLER_MAPPING, R.drawable.ic_controller, "#7268A6"));
+    subCategories.add(new SubCategory(LOCAL_CONTROL, R.drawable.ic_controller, "#7268A6"));
     subCategories.add(new SubCategory(ROBOT_INFO, R.drawable.ic_openbot_space, "#4B7BFF"));
     categories.add(new Category(GENERAL, subCategories));
 
@@ -86,6 +92,10 @@ public class FeatureList {
         new SubCategory(POINT_GOAL_NAVIGATION, R.drawable.ic_baseline_golf_course, "#1BBFBF"));
     subCategories.add(new SubCategory(MODEL_MANAGEMENT, R.drawable.ic_list_bulleted_48, "#BC7680"));
     categories.add(new Category(AI, subCategories));
+
+    subCategories = new ArrayList<>();
+    subCategories.add(new SubCategory(MAP_MANAGEMENT, R.drawable.ic_map, "#4CAF50"));
+    categories.add(new Category(MAPS, subCategories));
 
     subCategories = new ArrayList<>();
     subCategories.add(new SubCategory(DEFAULT, R.drawable.ic_legacy_car, "#F86363"));

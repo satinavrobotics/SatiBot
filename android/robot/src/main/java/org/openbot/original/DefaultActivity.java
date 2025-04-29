@@ -45,7 +45,6 @@ import org.openbot.R;
 import org.openbot.customview.OverlayView;
 import org.openbot.customview.OverlayView.DrawCallback;
 import org.openbot.env.BorderedText;
-import org.openbot.env.BotToControllerEventBus;
 import org.openbot.env.ImageUtils;
 import org.openbot.env.Logger;
 import org.openbot.tflite.Autopilot;
@@ -53,7 +52,6 @@ import org.openbot.tflite.Detector;
 import org.openbot.tflite.Model;
 import org.openbot.tflite.Network.Device;
 import org.openbot.tracking.MultiBoxTracker;
-import org.openbot.utils.ConnectionUtils;
 import org.openbot.utils.Enums.ControlMode;
 import org.openbot.utils.Enums.LogMode;
 
@@ -279,15 +277,6 @@ public class DefaultActivity extends CameraActivity implements OnImageAvailableL
         });
   }
 
-  protected void toggleNoise() {
-    noiseEnabled = !noiseEnabled;
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("NOISE", noiseEnabled));
-    if (noiseEnabled) {
-      vehicle.startNoise();
-    } else vehicle.stopNoise();
-    updateVehicleControl();
-  }
-
   @Override
   protected int getLayoutId() {
     return R.layout.camera_connection_fragment_tracking;
@@ -343,6 +332,11 @@ public class DefaultActivity extends CameraActivity implements OnImageAvailableL
     final Model model = getModel();
     final int numThreads = getNumThreads();
     runInBackground(() -> recreateNetwork(model, device, numThreads));
+  }
+
+  @Override
+  protected void toggleNoise() {
+
   }
 
   private void recreateNetwork(Model model, Device device, int numThreads) {

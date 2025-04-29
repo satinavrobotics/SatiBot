@@ -23,6 +23,8 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+
 import org.openbot.R;
 import org.openbot.common.ControlsFragment;
 import org.openbot.databinding.FragmentPointGoalNavigationBinding;
@@ -37,6 +39,8 @@ import org.openbot.utils.Constants;
 import org.openbot.utils.PermissionUtils;
 import org.openbot.vehicle.Control;
 import org.openbot.vehicle.Vehicle;
+
+import livekit.org.webrtc.VideoFrame;
 import timber.log.Timber;
 
 public class PointGoalNavigationFragment extends ControlsFragment implements ArCoreListener {
@@ -235,6 +239,11 @@ public class PointGoalNavigationFragment extends ControlsFragment implements ArC
     showInfoDialog(getString(R.string.ar_core_session_paused));
   }
 
+  @Override
+  public void onRenderedFrame(VideoFrame.I420Buffer frame, long timestamp) {
+
+  }
+
   private void stop() {
     arCore.detachAnchors();
     vehicle.stopBot();
@@ -290,6 +299,7 @@ public class PointGoalNavigationFragment extends ControlsFragment implements ArC
   }
 
   private void resume() {
+
     if (!PermissionUtils.hasCameraPermission(requireActivity())) {
       getCameraPermission();
     } else if (PermissionUtils.shouldShowRational(requireActivity(), Constants.PERMISSION_CAMERA)) {

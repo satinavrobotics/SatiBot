@@ -92,7 +92,7 @@
             android:text="@string/camera_facing_back"
             app:layout_constraintTop_toTopOf="@+id/autoLinearLayout"
             app:layout_constraintEnd_toStartOf="@+id/mirrorControl"
-            app:tint="@color/openBotBlue" />
+            app:tint="@color/satiBotRed" />
 
         <CheckBox
             android:id="@+id/mirrorControl"

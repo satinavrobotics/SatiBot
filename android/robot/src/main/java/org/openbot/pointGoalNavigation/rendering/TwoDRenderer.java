@@ -17,7 +17,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.BitmapFactory;
-import android.opengl.GLES20;
+import android.opengl.GLES30;
 import android.opengl.GLUtils;
 import android.opengl.Matrix;
 import android.util.Log;
@@ -100,17 +100,17 @@ public class TwoDRenderer {
       return;
     }
 
-    GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA);
-    GLES20.glEnable(GLES20.GL_BLEND);
+    GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA);
+    GLES30.glEnable(GLES30.GL_BLEND);
 
-    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-    GLES20.glGenTextures(mTextures.length, mTextures, 0);
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTextures[0]);
+    GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+    GLES30.glGenTextures(mTextures.length, mTextures, 0);
+    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, mTextures[0]);
 
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-    GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-    GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, textureBitmap, 0);
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_NEAREST);
+    GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_NEAREST);
+    GLUtils.texImage2D(GLES30.GL_TEXTURE_2D, 0, textureBitmap, 0);
+    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
 
     textureBitmap.recycle();
 
@@ -140,22 +140,22 @@ public class TwoDRenderer {
         ByteBuffer.allocateDirect(numVertices * TEXCOORDS_PER_VERTEX * Float.BYTES);
     bbTexCoordsTransformed.order(ByteOrder.nativeOrder());
 
-    int vertexShader = loadGLShader(TAG, GLES20.GL_VERTEX_SHADER, VERTEX_SHADER);
-    int fragmentShader = loadGLShader(TAG, GLES20.GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
+    int vertexShader = loadGLShader(TAG, GLES30.GL_VERTEX_SHADER, VERTEX_SHADER);
+    int fragmentShader = loadGLShader(TAG, GLES30.GL_FRAGMENT_SHADER, FRAGMENT_SHADER);
 
-    mQuadProgram = GLES20.glCreateProgram();
-    GLES20.glAttachShader(mQuadProgram, vertexShader);
-    GLES20.glAttachShader(mQuadProgram, fragmentShader);
-    GLES20.glLinkProgram(mQuadProgram);
-    GLES20.glUseProgram(mQuadProgram);
+    mQuadProgram = GLES30.glCreateProgram();
+    GLES30.glAttachShader(mQuadProgram, vertexShader);
+    GLES30.glAttachShader(mQuadProgram, fragmentShader);
+    GLES30.glLinkProgram(mQuadProgram);
+    GLES30.glUseProgram(mQuadProgram);
 
     ShaderUtil.checkGLError(TAG, "Program creation");
 
-    mQuadPositionParam = GLES20.glGetAttribLocation(mQuadProgram, "a_Position");
-    mQuadTexCoordParam = GLES20.glGetAttribLocation(mQuadProgram, "a_TexCoord");
-    mTextureUniform = GLES20.glGetUniformLocation(mQuadProgram, "u_Texture");
+    mQuadPositionParam = GLES30.glGetAttribLocation(mQuadProgram, "a_Position");
+    mQuadTexCoordParam = GLES30.glGetAttribLocation(mQuadProgram, "a_TexCoord");
+    mTextureUniform = GLES30.glGetUniformLocation(mQuadProgram, "u_Texture");
     mModelViewProjectionUniform =
-        GLES20.glGetUniformLocation(mQuadProgram, "u_ModelViewProjection");
+        GLES30.glGetUniformLocation(mQuadProgram, "u_ModelViewProjection");
 
     ShaderUtil.checkGLError(TAG, "Program parameters");
 
@@ -163,18 +163,18 @@ public class TwoDRenderer {
   }
 
   private int loadGLShader(String tag, int type, String source) {
-    int shader = GLES20.glCreateShader(type);
-    GLES20.glShaderSource(shader, source);
-    GLES20.glCompileShader(shader);
+    int shader = GLES30.glCreateShader(type);
+    GLES30.glShaderSource(shader, source);
+    GLES30.glCompileShader(shader);
 
     // Get the compilation status.
     final int[] compileStatus = new int[1];
-    GLES20.glGetShaderiv(shader, GLES20.GL_COMPILE_STATUS, compileStatus, 0);
+    GLES30.glGetShaderiv(shader, GLES30.GL_COMPILE_STATUS, compileStatus, 0);
 
     // If the compilation failed, delete the shader.
     if (compileStatus[0] == 0) {
-      Log.e(tag, "Error compiling shader: " + GLES20.glGetShaderInfoLog(shader));
-      GLES20.glDeleteShader(shader);
+      Log.e(tag, "Error compiling shader: " + GLES30.glGetShaderInfoLog(shader));
+      GLES30.glDeleteShader(shader);
       shader = 0;
     }
 
@@ -199,32 +199,32 @@ public class TwoDRenderer {
     Matrix.multiplyMM(mModelViewMatrix, 0, cameraView, 0, mModelMatrix, 0);
     Matrix.multiplyMM(mModelViewProjectionMatrix, 0, cameraPerspective, 0, mModelViewMatrix, 0);
 
-    GLES20.glUseProgram(mQuadProgram);
+    GLES30.glUseProgram(mQuadProgram);
 
     // Attach the object texture.
-    GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, mTextures[0]);
-    GLES20.glUniform1i(mTextureUniform, 0);
-    GLES20.glUniformMatrix4fv(mModelViewProjectionUniform, 1, false, mModelViewProjectionMatrix, 0);
+    GLES30.glActiveTexture(GLES30.GL_TEXTURE0);
+    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, mTextures[0]);
+    GLES30.glUniform1i(mTextureUniform, 0);
+    GLES30.glUniformMatrix4fv(mModelViewProjectionUniform, 1, false, mModelViewProjectionMatrix, 0);
     // Set the vertex positions.
-    GLES20.glVertexAttribPointer(
-        mQuadPositionParam, COORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, mQuadVertices);
+    GLES30.glVertexAttribPointer(
+        mQuadPositionParam, COORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, mQuadVertices);
 
     // Set the texture coordinates.
-    GLES20.glVertexAttribPointer(
-        mQuadTexCoordParam, TEXCOORDS_PER_VERTEX, GLES20.GL_FLOAT, false, 0, mQuadTexCoord);
+    GLES30.glVertexAttribPointer(
+        mQuadTexCoordParam, TEXCOORDS_PER_VERTEX, GLES30.GL_FLOAT, false, 0, mQuadTexCoord);
 
     // Enable vertex arrays
-    GLES20.glEnableVertexAttribArray(mQuadPositionParam);
-    GLES20.glEnableVertexAttribArray(mQuadTexCoordParam);
+    GLES30.glEnableVertexAttribArray(mQuadPositionParam);
+    GLES30.glEnableVertexAttribArray(mQuadTexCoordParam);
 
-    GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
+    GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4);
 
     // Disable vertex arrays
-    GLES20.glDisableVertexAttribArray(mQuadPositionParam);
-    GLES20.glDisableVertexAttribArray(mQuadTexCoordParam);
+    GLES30.glDisableVertexAttribArray(mQuadPositionParam);
+    GLES30.glDisableVertexAttribArray(mQuadTexCoordParam);
 
-    GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, 0);
+    GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0);
 
     ShaderUtil.checkGLError(TAG, "After draw");
   }

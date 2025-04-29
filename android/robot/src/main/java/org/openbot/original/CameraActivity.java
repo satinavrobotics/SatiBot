@@ -83,7 +83,6 @@ import org.json.JSONObject;
 import org.openbot.OpenBotApplication;
 import org.openbot.R;
 import org.openbot.env.AudioPlayer;
-import org.openbot.env.BotToControllerEventBus;
 import org.openbot.env.ControllerToBotEventBus;
 import org.openbot.env.GameController;
 import org.openbot.env.ImageUtils;
@@ -92,11 +91,8 @@ import org.openbot.env.PhoneController;
 import org.openbot.env.SharedPreferencesManager;
 import org.openbot.logging.LogDataUtils;
 import org.openbot.logging.SensorService;
-import org.openbot.server.ServerCommunication;
-import org.openbot.server.ServerListener;
 import org.openbot.tflite.Model;
 import org.openbot.tflite.Network.Device;
-import org.openbot.utils.ConnectionUtils;
 import org.openbot.utils.Constants;
 import org.openbot.utils.Enums;
 import org.openbot.utils.Enums.ControlMode;
@@ -115,7 +111,6 @@ public abstract class CameraActivity extends AppCompatActivity
     implements OnImageAvailableListener,
         Camera.PreviewCallback,
         CompoundButton.OnCheckedChangeListener,
-        ServerListener,
         View.OnClickListener,
         AdapterView.OnItemSelectedListener {
   private static final Logger LOGGER = new Logger();
@@ -180,7 +175,7 @@ public abstract class CameraActivity extends AppCompatActivity
   protected boolean noiseEnabled = false;
 
   private Intent intentSensorService;
-  private ServerCommunication serverCommunication;
+
   protected SharedPreferencesManager preferencesManager;
   protected final GameController gameController = new GameController(driveMode);
   private PhoneController phoneController;
@@ -199,7 +194,7 @@ public abstract class CameraActivity extends AppCompatActivity
     audioPlayer = new AudioPlayer(context);
     vehicle = OpenBotApplication.vehicle;
 
-    phoneController = PhoneController.getInstance(context);
+    phoneController = PhoneController.getInstance(this);
     preferencesManager = new SharedPreferencesManager(this);
 
     setContentView(R.layout.activity_camera);
@@ -625,46 +620,10 @@ public abstract class CameraActivity extends AppCompatActivity
     handlerThread = new HandlerThread("inference");
     handlerThread.start();
     handler = new Handler(handlerThread.getLooper());
-    serverCommunication = new ServerCommunication(this, this);
-    serverCommunication.start();
+    //serverCommunication = new ServerCommunication(this, this);
+    //serverCommunication.start();
   }
 
-  @Override
-  public void onAddModel(String model) {
-    Model item =
-        new Model(
-            masterList.size() + 1,
-            Model.CLASS.AUTOPILOT,
-            Model.TYPE.CMDNAV,
-            model,
-            Model.PATH_TYPE.FILE,
-            getFilesDir() + File.separator + model,
-            "256x96");
-    if (modelAdapter != null && modelAdapter.getPosition(model) == -1) {
-      modelAdapter.add(model);
-      masterList.add(item);
-      FileUtils.updateModelConfig(this, context,masterList, false);
-    } else {
-      if (model.equals(modelSpinner.getSelectedItem())) {
-        setModel(item);
-      }
-    }
-    Toast.makeText(context, "AutopilotModel added: " + model, Toast.LENGTH_SHORT).show();
-  }
-
-  @Override
-  public void onRemoveModel(String model) {
-    if (modelAdapter != null && modelAdapter.getPosition(model) != -1) {
-      modelAdapter.remove(model);
-    }
-    Toast.makeText(context, "AutopilotModel removed: " + model, Toast.LENGTH_SHORT).show();
-  }
-
-  @Override
-  public void onServerListChange(Set<String> servers) {}
-
-  @Override
-  public void onConnectionEstablished(String ipAddress) {}
 
   @Override
   public synchronized void onPause() {
@@ -674,11 +633,11 @@ public abstract class CameraActivity extends AppCompatActivity
       handlerThread.join();
       handlerThread = null;
       handler = null;
-      serverCommunication.stop();
+      //serverCommunication.stop();
     } catch (final InterruptedException e) {
       LOGGER.e(e, "Exception!");
     }
-    phoneController.disconnect();
+    phoneController.disconnectLiveKitServer();
     vehicle.setControl(0, 0);
     super.onPause();
   }
@@ -741,7 +700,7 @@ public abstract class CameraActivity extends AppCompatActivity
       case Constants.REQUEST_CONTROLLER_PERMISSIONS:
         // If the permission is granted, start advertising to controller,
         // otherwise, show a Toast
-        if (PermissionUtils.checkControllerPermissions(grantResults)) phoneController.connect(this);
+        if (PermissionUtils.checkControllerPermissions(grantResults)) phoneController.connectLiveKitServer();
         else PermissionUtils.showControllerPermissionsToast(this);
         break;
     }
@@ -935,7 +894,7 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   private void connectPhoneController() {
-    phoneController.connect(this);
+   //phoneController.connectLiveKitServer();
     DriveMode oldDriveMode = driveMode;
     // Currently only dual drive mode supported
     setDriveMode(DriveMode.DUAL);
@@ -944,7 +903,7 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   private void connectWebController() {
-    phoneController.connectWebServer();
+    //phoneController.connectWebServer();
     DriveMode oldDriveMode = driveMode;
     // Currently only dual drive mode supported
     setDriveMode(Enums.DriveMode.GAME);
@@ -953,7 +912,7 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   private void disconnectPhoneController() {
-    phoneController.disconnect();
+    //phoneController.disconnect();
     setDriveMode(DriveMode.values()[preferencesManager.getDriveMode()]);
     driveModeSpinner.setEnabled(true);
     driveModeSpinner.setAlpha(1.0f);
@@ -966,8 +925,8 @@ public abstract class CameraActivity extends AppCompatActivity
       preferencesManager.setDriveMode(driveMode.getValue());
       gameController.setDriveMode(driveMode);
       driveModeSpinner.setSelection(driveMode.ordinal());
-      BotToControllerEventBus.emitEvent(
-          ConnectionUtils.createStatus("DRIVE_MODE", driveMode.toString()));
+      //BotToControllerEventBus.emitEvent(
+      //    ConnectionUtils.createStatus("DRIVE_MODE", driveMode.toString()));
     }
   }
 
@@ -1142,7 +1101,7 @@ public abstract class CameraActivity extends AppCompatActivity
             TimeUnit.MILLISECONDS.sleep(500);
             ZipUtil.pack(folder, zip);
             org.zeroturnaround.zip.commons.FileUtils.deleteQuietly(folder);
-            serverCommunication.upload(zip);
+            //serverCommunication.upload(zip);
           } catch (InterruptedException e) {
             LOGGER.e(e, "Got interrupted.");
           }
@@ -1162,7 +1121,7 @@ public abstract class CameraActivity extends AppCompatActivity
       stopLogging();
       loggingEnabled = false;
     }
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("LOGS", loggingEnabled));
+    //BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("LOGS", loggingEnabled));
 
     logSpinner.setEnabled(!loggingEnabled);
     if (loggingEnabled) logSpinner.setAlpha(0.5f);
@@ -1319,10 +1278,6 @@ public abstract class CameraActivity extends AppCompatActivity
               controllerHandler.handleLogging();
               break;
 
-            case "NOISE":
-              controllerHandler.handleNoise();
-              break;
-
             case "INDICATOR_LEFT":
               controllerHandler.handleIndicatorLeft();
               break;
@@ -1349,13 +1304,12 @@ public abstract class CameraActivity extends AppCompatActivity
               // controller.
               // Other controllers can subscribe to this event as well.
               // That is why we are not calling phoneController.send() here directly.
-              BotToControllerEventBus.emitEvent(
-                  ConnectionUtils.getStatus(
-                      loggingEnabled,
-                      noiseEnabled,
-                      networkEnabled,
-                      driveMode.toString(),
-                      vehicle.getIndicator()));
+              //BotToControllerEventBus.emitEvent(
+              //    ConnectionUtils.getStatus(
+              //        loggingEnabled,
+              //        networkEnabled,
+              //        driveMode.toString(),
+              //        vehicle.getIndicator()));
 
               break;
 
@@ -1373,9 +1327,9 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   private void sendIndicatorStatus(Integer status) {
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_LEFT", status == -1));
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_RIGHT", status == 1));
-    BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_STOP", status == 0));
+    //BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_LEFT", status == -1));
+    //BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_RIGHT", status == 1));
+    //BotToControllerEventBus.emitEvent(ConnectionUtils.createStatus("INDICATOR_STOP", status == 0));
   }
 
   // Controller event handler

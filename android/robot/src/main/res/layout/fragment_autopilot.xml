@@ -266,7 +266,7 @@
             app:layout_constraintBottom_toBottomOf="@+id/auto_switch"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="@+id/auto_switch"
-            app:tint="@color/openBotBlue" />
+            app:tint="@color/satiBotRed" />
 
 
         <include

@@ -58,6 +58,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import livekit.org.webrtc.VideoFrame;
 import timber.log.Timber;
 
 public class BlocklyExecutingFragment extends CameraFragment implements ArCoreListener {
@@ -691,6 +692,11 @@ public class BlocklyExecutingFragment extends CameraFragment implements ArCoreLi
         vehicle.setControl(control);
       }
     }
+  }
+
+  @Override
+  public void onRenderedFrame(VideoFrame.I420Buffer frame, long timestamp) {
+
   }
 
   @Override

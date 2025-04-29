@@ -110,7 +110,7 @@ public class ControllerMappingFragment extends Fragment {
       case KeyEvent.KEYCODE_BUTTON_START: // options
         if (keyCode.getAction() == KeyEvent.ACTION_DOWN)
           binding.startButton.setImageTintList(
-              ColorStateList.valueOf(getResources().getColor(R.color.openBotBlue)));
+              ColorStateList.valueOf(getResources().getColor(R.color.satiBotRed)));
         if (keyCode.getAction() == KeyEvent.ACTION_UP) {
           binding.startButton.setImageResource(R.drawable.circle);
           binding.startButton.setImageTintList(
@@ -121,7 +121,7 @@ public class ControllerMappingFragment extends Fragment {
       case KeyEvent.KEYCODE_BUTTON_L1:
         if (keyCode.getAction() == KeyEvent.ACTION_DOWN)
           binding.btnL1.setBackgroundTintList(
-              ColorStateList.valueOf(getResources().getColor(R.color.openBotBlue)));
+              ColorStateList.valueOf(getResources().getColor(R.color.satiBotRed)));
         if (keyCode.getAction() == KeyEvent.ACTION_UP)
           binding.btnL1.setBackgroundTintList(
               ColorStateList.valueOf(getResources().getColor(android.R.color.transparent)));
@@ -129,7 +129,7 @@ public class ControllerMappingFragment extends Fragment {
       case KeyEvent.KEYCODE_BUTTON_R1:
         if (keyCode.getAction() == KeyEvent.ACTION_DOWN)
           binding.btnR1.setBackgroundTintList(
-              ColorStateList.valueOf(getResources().getColor(R.color.openBotBlue)));
+              ColorStateList.valueOf(getResources().getColor(R.color.satiBotRed)));
         if (keyCode.getAction() == KeyEvent.ACTION_UP)
           binding.btnR1.setBackgroundTintList(
               ColorStateList.valueOf(getResources().getColor(android.R.color.transparent)));
@@ -138,7 +138,7 @@ public class ControllerMappingFragment extends Fragment {
       case KeyEvent.KEYCODE_BUTTON_L2:
         if (keyCode.getAction() == KeyEvent.ACTION_DOWN)
           binding.btnL2.setBackgroundTintList(
-              ColorStateList.valueOf(getResources().getColor(R.color.openBotBlue)));
+              ColorStateList.valueOf(getResources().getColor(R.color.satiBotRed)));
         if (keyCode.getAction() == KeyEvent.ACTION_UP)
           binding.btnL2.setBackgroundTintList(
               ColorStateList.valueOf(getResources().getColor(android.R.color.transparent)));
@@ -146,7 +146,7 @@ public class ControllerMappingFragment extends Fragment {
       case KeyEvent.KEYCODE_BUTTON_R2:
         if (keyCode.getAction() == KeyEvent.ACTION_DOWN)
           binding.btnR2.setBackgroundTintList(
-              ColorStateList.valueOf(getResources().getColor(R.color.openBotBlue)));
+              ColorStateList.valueOf(getResources().getColor(R.color.satiBotRed)));
         if (keyCode.getAction() == KeyEvent.ACTION_UP)
           binding.btnR2.setBackgroundTintList(
               ColorStateList.valueOf(getResources().getColor(android.R.color.transparent)));

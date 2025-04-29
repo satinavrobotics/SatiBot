@@ -12,6 +12,8 @@ import org.jetbrains.annotations.NotNull;
 import org.openbot.R;
 import org.openbot.common.ControlsFragment;
 import org.openbot.databinding.FragmentRobotInfoBinding;
+import org.openbot.utils.FormatUtils;
+import timber.log.Timber;
 
 public class RobotInfoFragment extends ControlsFragment {
   private FragmentRobotInfoBinding binding;
@@ -64,11 +66,11 @@ public class RobotInfoFragment extends ControlsFragment {
           vehicle.sendLightIntensity(value / 100, value / 100);
         });
 
-    binding.motorsForwardButton.setOnClickListener(v -> vehicle.setControl(0.75f, 0.75f));
+    binding.motorsForwardButton.setOnClickListener(v -> vehicle.setControlVelocity(0.1f, 0.0f));
 
-    binding.motorsBackwardButton.setOnClickListener(v -> vehicle.setControl(-0.75f, -0.75f));
+    binding.motorsBackwardButton.setOnClickListener(v -> vehicle.setControlVelocity(-0.1f, 0.0f));
 
-    binding.motorsStopButton.setOnClickListener(v -> vehicle.setControl(0.0f, 0.0f));
+    binding.motorsStopButton.setOnClickListener(v -> vehicle.setControlVelocity(0.0f, 0.0f));
 
     refreshGui();
   }
@@ -113,6 +115,11 @@ public class RobotInfoFragment extends ControlsFragment {
       binding.voltageInfo.setText(R.string.voltage);
       binding.speedInfo.setText(R.string.rpm);
       binding.sonarInfo.setText(R.string.distance);
+      binding.wheelEncoderValue.setText(getString(R.string.angular_velocity_format, "*.** "));
+      binding.imuValue.setText(getString(R.string.angular_velocity_format, "*.** "));
+      binding.fusedValue.setText(getString(R.string.angular_velocity_format, "*.** "));
+      binding.pwmValue.setText(getString(R.string.pwm_format, "***", "***"));
+      binding.wheelCountValue.setText(getString(R.string.wheel_count_format, "***", "***"));
       vehicle.setHasVoltageDivider(false);
       vehicle.setHasSonar(false);
       vehicle.setHasIndicators(false);
@@ -154,7 +161,7 @@ public class RobotInfoFragment extends ControlsFragment {
       vehicle.requestVehicleConfig();
     }
     char header = data.charAt(0);
-    // String body = data.substring(1);
+    String body = data.substring(1);
     // int type = -1;
     switch (header) {
       case 'r':
@@ -178,6 +185,91 @@ public class RobotInfoFragment extends ControlsFragment {
       case 's':
         binding.sonarInfo.setText(String.format(Locale.US, "%3.0f cm", vehicle.getSonarReading()));
         break;
+      case 'e': // Wheel encoder angular velocity
+        Timber.d("e");
+        if (FormatUtils.isNumeric(body)) {
+          float value = Float.parseFloat(body);
+          vehicle.setWheelEncoderAngularVelocity(value);
+          updateWheelEncoderAngularVelocity(value);
+        }
+        break;
+      case 'i': // IMU angular velocity
+        Timber.d("i");
+        if (FormatUtils.isNumeric(body)) {
+          float value = Float.parseFloat(body);
+          vehicle.setImuAngularVelocity(value);
+          updateImuAngularVelocity(value);
+        }
+        break;
+      case 'k': // Fused angular velocity
+        Timber.d("k");
+        if (FormatUtils.isNumeric(body)) {
+          float value = Float.parseFloat(body);
+          vehicle.setFusedAngularVelocity(value);
+          updateFusedAngularVelocity(value);
+        }
+        break;
+      case 'p': // PWM values
+        Timber.d("p");
+        String[] pwmValues = body.split(",");
+        if (pwmValues.length == 2 && FormatUtils.isNumeric(pwmValues[0]) && FormatUtils.isNumeric(pwmValues[1])) {
+          float leftPwm = Float.parseFloat(pwmValues[0]);
+          float rightPwm = Float.parseFloat(pwmValues[1]);
+          vehicle.setLeftPwm(leftPwm);
+          vehicle.setRightPwm(rightPwm);
+          updatePwmValues(leftPwm, rightPwm);
+        }
+        break;
+      case 'c': // Wheel hall effect counts
+        Timber.d("c");
+        String[] wheelCountValues = body.split(",");
+        if (wheelCountValues.length == 2 && FormatUtils.isNumeric(wheelCountValues[0]) && FormatUtils.isNumeric(wheelCountValues[1])) {
+          float leftCount = Float.parseFloat(wheelCountValues[0]);
+          float rightCount = Float.parseFloat(wheelCountValues[1]);
+          vehicle.setLeftWheelCount(leftCount);
+          vehicle.setRightWheelCount(rightCount);
+          updateWheelCountValues(leftCount, rightCount);
+        }
+        break;
+    }
+  }
+
+  private void updateWheelEncoderAngularVelocity(float value) {
+    if (binding != null) {
+      binding.wheelEncoderValue.setText(
+          getString(R.string.angular_velocity_format, String.format(Locale.US, "%.2f", value)));
+    }
+  }
+
+  private void updateImuAngularVelocity(float value) {
+    if (binding != null) {
+      binding.imuValue.setText(
+          getString(R.string.angular_velocity_format, String.format(Locale.US, "%.2f", value)));
+    }
+  }
+
+  private void updateFusedAngularVelocity(float value) {
+    if (binding != null) {
+      binding.fusedValue.setText(
+          getString(R.string.angular_velocity_format, String.format(Locale.US, "%.2f", value)));
+    }
+  }
+
+  private void updatePwmValues(float leftPwm, float rightPwm) {
+    if (binding != null) {
+      binding.pwmValue.setText(
+          getString(R.string.pwm_format,
+                   String.format(Locale.US, "%3.0f", leftPwm),
+                   String.format(Locale.US, "%3.0f", rightPwm)));
+    }
+  }
+
+  private void updateWheelCountValues(float leftCount, float rightCount) {
+    if (binding != null) {
+      binding.wheelCountValue.setText(
+          getString(R.string.wheel_count_format,
+                   String.format(Locale.US, "%3.0f", leftCount),
+                   String.format(Locale.US, "%3.0f", rightCount)));
     }
   }
 

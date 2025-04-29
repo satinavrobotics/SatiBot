@@ -98,7 +98,7 @@ public class AutopilotFragment extends CameraFragment {
         List<String> models =
                 getModelNames(f -> f.type.equals(Model.TYPE.CMDNAV) && f.pathType != Model.PATH_TYPE.URL);
         initModelSpinner(binding.modelSpinner, models, preferencesManager.getAutopilotModel());
-        initServerSpinner(binding.serverSpinner);
+        //initServerSpinner(binding.serverSpinner);
         setAnalyserResolution(Enums.Preview.HD.getValue());
         binding.deviceSpinner.setOnItemSelectedListener(
                 new AdapterView.OnItemSelectedListener() {
@@ -159,14 +159,8 @@ public class AutopilotFragment extends CameraFragment {
         setControlMode(Enums.ControlMode.getByID(preferencesManager.getControlMode()));
         setDriveMode(Enums.DriveMode.getByID(preferencesManager.getDriveMode()));
 
-        binding.controllerContainer.controlMode.setOnClickListener(
-                v -> {
-                    Enums.ControlMode controlMode =
-                            Enums.ControlMode.getByID(preferencesManager.getControlMode());
-                    if (controlMode != null) setControlMode(Enums.switchControlMode(controlMode));
-                });
-        binding.controllerContainer.driveMode.setOnClickListener(
-                v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
+        //binding.controllerContainer.driveMode.setOnClickListener(
+        //        v -> setDriveMode(Enums.switchDriveMode(vehicle.getDriveMode())));
 
         binding.controllerContainer.speedMode.setOnClickListener(
                 v ->
@@ -381,12 +375,12 @@ public class AutopilotFragment extends CameraFragment {
 
     private void setNetworkEnabled(boolean b) {
         binding.autoSwitch.setChecked(b);
-        binding.controllerContainer.controlMode.setEnabled(!b);
-        binding.controllerContainer.driveMode.setEnabled(!b);
+        //binding.controllerContainer.controlMode.setEnabled(!b);
+        //binding.controllerContainer.driveMode.setEnabled(!b);
         binding.controllerContainer.speedMode.setEnabled(!b);
 
-        binding.controllerContainer.controlMode.setAlpha(b ? 0.5f : 1f);
-        binding.controllerContainer.driveMode.setAlpha(b ? 0.5f : 1f);
+        //binding.controllerContainer.controlMode.setAlpha(b ? 0.5f : 1f);
+        //binding.controllerContainer.driveMode.setAlpha(b ? 0.5f : 1f);
         binding.controllerContainer.speedMode.setAlpha(b ? 0.5f : 1f);
 
         if (!b) {
@@ -448,22 +442,22 @@ public class AutopilotFragment extends CameraFragment {
                                         String.format(Locale.US, "%.0f,%.0f", left, right)));
     }
 
-    @Override
-    public void onConnectionEstablished(String ipAddress) {
-        requireActivity().runOnUiThread(() -> binding.ipAddress.setText(ipAddress));
-    }
+    //@Override
+    //public void onConnectionEstablished(String ipAddress) {
+    //    requireActivity().runOnUiThread(() -> binding.ipAddress.setText(ipAddress));
+    //}
 
     protected Model getModel() {
         return model;
     }
 
     private void connectWebController() {
-        phoneController.connectWebServer();
+        //phoneController.connectWebServer();
         Enums.DriveMode oldDriveMode = currentDriveMode;
         // Currently only dual drive mode supported
         setDriveMode(Enums.DriveMode.GAME);
-        binding.controllerContainer.driveMode.setAlpha(0.5f);
-        binding.controllerContainer.driveMode.setEnabled(false);
+        //binding.controllerContainer.driveMode.setAlpha(0.5f);
+        //binding.controllerContainer.driveMode.setEnabled(false);
         preferencesManager.setDriveMode(oldDriveMode.getValue());
     }
 
@@ -532,17 +526,17 @@ public class AutopilotFragment extends CameraFragment {
         if (controlMode != null) {
             switch (controlMode) {
                 case GAMEPAD:
-                    binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_controller);
+                    //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_controller);
                     disconnectPhoneController();
                     break;
                 case PHONE:
-                    binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_phone);
+                    //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_phone);
                     if (!PermissionUtils.hasControllerPermissions(requireActivity()))
                         requestPermissionLauncher.launch(Constants.PERMISSIONS_CONTROLLER);
                     else connectPhoneController();
                     break;
                 case WEBSERVER:
-                    binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_server);
+                    //binding.controllerContainer.controlMode.setImageResource(R.drawable.ic_server);
                     if (!PermissionUtils.hasControllerPermissions(requireActivity()))
                         requestPermissionLauncher.launch(Constants.PERMISSIONS_CONTROLLER);
                     else connectWebController();
@@ -557,13 +551,13 @@ public class AutopilotFragment extends CameraFragment {
         if (driveMode != null) {
             switch (driveMode) {
                 case DUAL:
-                    binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
+                    //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_dual);
                     break;
                 case GAME:
-                    binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_game);
+                    //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_game);
                     break;
                 case JOYSTICK:
-                    binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_joystick);
+                    //binding.controllerContainer.driveMode.setImageResource(R.drawable.ic_joystick);
                     break;
             }
 
@@ -574,20 +568,20 @@ public class AutopilotFragment extends CameraFragment {
     }
 
     private void connectPhoneController() {
-        phoneController.connect(requireContext());
+        //phoneController.connect(requireContext());
         Enums.DriveMode oldDriveMode = currentDriveMode;
         // Currently only dual drive mode supported
         setDriveMode(Enums.DriveMode.DUAL);
-        binding.controllerContainer.driveMode.setAlpha(0.5f);
-        binding.controllerContainer.driveMode.setEnabled(false);
+        //binding.controllerContainer.driveMode.setAlpha(0.5f);
+        //binding.controllerContainer.driveMode.setEnabled(false);
         preferencesManager.setDriveMode(oldDriveMode.getValue());
     }
 
     private void disconnectPhoneController() {
-        phoneController.disconnect();
+        //phoneController.disconnect();
         setDriveMode(Enums.DriveMode.getByID(preferencesManager.getDriveMode()));
-        binding.controllerContainer.driveMode.setEnabled(true);
-        binding.controllerContainer.driveMode.setAlpha(1.0f);
+        //binding.controllerContainer.driveMode.setEnabled(true);
+        //binding.controllerContainer.driveMode.setAlpha(1.0f);
     }
 }
 
