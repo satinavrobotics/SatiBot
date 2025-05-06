@@ -63,6 +63,10 @@ void VelocityController::setTargetAngularVelocity(float targetVelocity) {
         float scale = 1.0f - abs(targetLinear);
         targetAngularVelocity *= scale;
     }
+
+    if (targetLinear < 0) {
+        targetAngularVelocity *= -1.0f;
+    }
     
     // With direct integration, we don't need to update target heading immediately
     // It will be updated in the next update() call
@@ -162,8 +166,22 @@ void VelocityController::update() {
     float error = targetHeading - heading;
 
     // Wrap the error to the range [-PI, PI]
-    if (error > PI) error = PI;
-    if (error < -PI) error = -PI;
+    float threshold1 = 0.2f;
+    float threshold2 = 0.4f;
+    if (error > threshold1) {
+        if (error > threshold2) {
+            reset();
+        } else {
+            error = threshold1;
+        }
+    }
+    if (error < -threshold1) {
+        if (error < threshold2) {
+            reset();
+        } else {
+            error = -threshold1;
+        }
+    }
 
     // Calculate derivative term using measured dt
     float derivative = (error - lastError) / measuredDt;
@@ -214,8 +232,16 @@ void VelocityController::updateHeading(float omega) {
     // Normalize heading to keep it within a reasonable range
     // This prevents potential issues with very large heading values over time
     // 2*PI radians = 360 degrees = one full rotation
-    while (heading > TWO_PI) heading -= TWO_PI;
-    while (heading < -TWO_PI) heading += TWO_PI;
+    //while (heading > TWO_PI) 
+    //{
+    //    heading -= TWO_PI;
+    //    targetHeading -= TWO_PI;
+    //}
+    //while (heading < -TWO_PI)
+    //{
+    //    heading += TWO_PI ;
+    //    targetHeading += TWO_PI;
+    //} 
 }
 
 void VelocityController::updateTargetHeading() {
@@ -226,8 +252,18 @@ void VelocityController::updateTargetHeading() {
 
     // Normalize target heading to keep it within a reasonable range
     // Using the predefined TWO_PI constant from Arduino.h
-    while (targetHeading > TWO_PI) targetHeading -= TWO_PI;
-    while (targetHeading < -TWO_PI) targetHeading += TWO_PI;
+    //while (targetHeading > TWO_PI) 
+    //{
+    //    targetHeading -= TWO_PI;
+    //    heading -= TWO_PI;
+    //}
+
+    //while (targetHeading < -TWO_PI) 
+    //{
+    //    targetHeading += TWO_PI;
+    //    heading += TWO_PI;
+    //}
+    
 }
 
 void VelocityController::updateCurrentLinearVelocity() {
