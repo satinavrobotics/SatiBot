@@ -35,21 +35,31 @@ void Motors::updateVehicle(float normalizedLinearVelocity, float headingAdjustme
         // Right wheel: add heading adjustment (positive correction for right wheel)
         int leftPwm, rightPwm;
         if (abs(scaledLinearVelocity) > 0.01f) {
-            // when lin_vel = 100 -> scale = 0.1
-            // when lin_vel = 1 -> scale = 1
-            float scale = 1.0f - 3 * abs(scaledLinearVelocity) / MAX_PWM;
+            // norm : 0.1 -> 0.75
+            // 1-norm: 0.9 -> 0.25
+            // 2.0 is handpicked value
+            float scale = 6.5f * (abs(normalizedLinearVelocity) + 0.75f);
             float adjustment = headingAdjustment * scale;
-            leftPwm = (int)(scaledLinearVelocity - adjustment);
-            rightPwm = (int)(scaledLinearVelocity + adjustment);
+            leftPwm = (int)(scaledLinearVelocity + adjustment);
+            rightPwm = (int)(scaledLinearVelocity - adjustment);
+            if (scaledLinearVelocity > 0) {
+                leftPwm = constrain(leftPwm, 0, 255);
+                rightPwm = constrain(rightPwm, 0, 255);
+            } else {
+                leftPwm = constrain(leftPwm, -255, 0);
+                rightPwm = constrain(rightPwm, -255, 0);
+            }
+
         } else {
-            leftPwm = (int)(-5*headingAdjustment);
-            rightPwm = (int)(+5*headingAdjustment);
+            leftPwm = (int)(-6*headingAdjustment);
+            rightPwm = (int)(+6*headingAdjustment);
+            // Ensure PWM values are within valid range
+            leftPwm = constrain(leftPwm, -255, 255);
+            rightPwm = constrain(rightPwm, -255, 255);
         }
 
         
-        // Ensure PWM values are within valid range
-        leftPwm = constrain(leftPwm, -255, 255);
-        rightPwm = constrain(rightPwm, -255, 255);
+
         
         // Save the computed PWM values
         currentPwmLeft = leftPwm;
