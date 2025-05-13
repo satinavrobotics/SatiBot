@@ -69,8 +69,10 @@ void setup() {
   // p:2.5, d:0.1 // akadozva megy jó irányba
   // p:1.5, d:0.5 // oda-vissza oszcillál
 
-  velocityController->setKp(35.0f);
+  //velocityController->setKp(35.0f);
+  velocityController->setKp(7.0f);
   velocityController->setKi(0.0f);  // Not used in cseled_test
+  //velocityController->setKd(2.0f);
   velocityController->setKd(2.0f);
 
   // Initialize communication with VelocityController
@@ -121,6 +123,10 @@ void setup() {
 }
 
 void loop() {
+
+  //digitalWrite(config->getPinStopLeft(), LOW);
+  //digitalWrite(config->getPinStopRight(), LOW);
+
   // Test mode handling
   ///////////////////////////////////////////////////////////////
   // Check if we're in test mode
@@ -203,7 +209,7 @@ void loop() {
   communication->sendData("th" + String(targetHeading, 6));
 
   // Send the normalized linear velocity to the phone
-  communication->sendData("v" + String(normalizedLinearVelocity, 6));
+  communication->sendData("n" + String(normalizedLinearVelocity, 6));
 
   // Send the target angular velocity to the phone
   communication->sendData("a" + String(velocityController->getTargetAngularVelocity(), 6));
@@ -214,11 +220,14 @@ void loop() {
   motors->updateVehicle(normalizedLinearVelocity, headingAdjustment);
 
   // Update Kalman filter
-  sensors->updateKalmanFilter();
+  //sensors->updateKalmanFilter();
+
+  // Update battery status
+  // sensors->updateBatteryStatus();
 
   // Get the fused velocity estimates (this will trigger sending the data via communication)
-  float fusedAngularVelocity = sensors->getFusedAngularVelocity();
-  float fusedLinearVelocity = sensors->getFusedLinearVelocity();
+  //float fusedAngularVelocity = sensors->getFusedAngularVelocity();
+  //float fusedLinearVelocity = sensors->getFusedLinearVelocity();
 
   // Optional: Print debug information if in debug mode
   if (config->isDebugMode()) {
@@ -227,19 +236,23 @@ void loop() {
 
     // Print debug info every 500ms to avoid flooding the serial port
     if (currentTime - lastDebugTime >= 500) {
-      Serial.print("Fused Angular Velocity: ");
-      Serial.print(fusedAngularVelocity);
-      Serial.print(" rad/s, Linear Velocity: ");
-      Serial.print(fusedLinearVelocity);
-      Serial.println(" m/s");
+      //Serial.print("Fused Angular Velocity: ");
+      //Serial.print(fusedAngularVelocity);
+      //Serial.print(" rad/s, Linear Velocity: ");
+      //Serial.print(fusedLinearVelocity);
+      //Serial.print(" m/s, Battery: ");
+      //Serial.print(sensors->getBatteryVoltage());
+      //Serial.print("V (");
+      //Serial.print(sensors->getBatteryPercentage());
+      //Serial.println("%)");
 
       // Print PID controller information (always enabled)
-      Serial.print("PID Controller: Target Angular Velocity: ");
-      Serial.print(velocityController->getTargetAngularVelocity());
-      Serial.print(" rad/s, Error: ");
-      Serial.print(velocityController->getTargetAngularVelocity() - fusedAngularVelocity);
-      Serial.print(" rad/s, Normalized Linear Velocity: ");
-      Serial.print(velocityController->getNormalizedLinearVelocity());
+      //Serial.print("PID Controller: Target Angular Velocity: ");
+      //Serial.print(velocityController->getTargetAngularVelocity());
+      //Serial.print(" rad/s, Error: ");
+      //Serial.print(velocityController->getTargetAngularVelocity() - fusedAngularVelocity);
+      //Serial.print(" rad/s, Normalized Linear Velocity: ");
+      //Serial.print(velocityController->getNormalizedLinearVelocity());
       Serial.print(", Left PWM: ");
       Serial.print(motors->getCurrentPwmLeft());
       Serial.print(", Right PWM: ");

@@ -39,6 +39,9 @@ void Config::initializeConfig() {
         pinHallR = 1; // Hall effect sensor for right wheel
         pinSdaIMU = 8; // SDA pin for I2C communication with IMU
         pinSclIMU = 9; // SCL pin for I2C communication with IMU
+        pinVoltageDivider = 2; // Analog pin for battery voltage divider
+        pinStopLeft = 5;
+        pinStopRight = 21;
     }
     else if (robotType == DIY_ESP32) {
         mcuType = ESP32;
@@ -60,6 +63,9 @@ void Config::initializeConfig() {
         pinHallR = 1; // Hall effect sensor for right wheel
         pinSdaIMU = 8; // SDA pin for I2C communication with IMU
         pinSclIMU = 9; // SCL pin for I2C communication with IMU
+        pinVoltageDivider = 2; // Analog pin for battery voltage divider (ESP32)
+        pinStopLeft = 5;
+        pinStopRight = 21;
     }
 
     pinMode(pinPwmL1, OUTPUT);
@@ -68,9 +74,14 @@ void Config::initializeConfig() {
     pinMode(pinPwmR2, OUTPUT);
     pinMode(pinDirectionL, OUTPUT);
     pinMode(pinDirectionR, OUTPUT);
+    pinMode(pinStopLeft, OUTPUT);
+    pinMode(pinStopRight, OUTPUT);
+
     pinMode(pinHallL, INPUT_PULLUP);
     pinMode(pinHallR, INPUT_PULLUP);
+    pinMode(pinVoltageDivider, INPUT);
 }
+
 
 uint8_t Config::getRobotType() const {
     return robotType;
@@ -136,6 +147,10 @@ int Config::getPinSclIMU() const {
     return pinSclIMU;
 }
 
+int Config::getPinVoltageDivider() const {
+    return pinVoltageDivider;
+}
+
 bool Config::isNoPhoneMode() const {
     return noPhoneMode;
 }
@@ -158,4 +173,12 @@ int Config::getCtrlSlow() const {
 
 int Config::getCtrlMin() const {
     return ctrlMin;
+}
+
+int Config::getPinStopLeft() const {
+    return pinStopLeft;
+}
+
+int Config::getPinStopRight() const {
+    return pinStopRight;
 }

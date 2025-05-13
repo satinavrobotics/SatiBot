@@ -27,16 +27,16 @@ Sensors::Sensors(Config* config)
       newIMUDataAvailable(false),
       lastIMUSampleTime(0),
       lastKalmanUpdateTime(0),
-      ax_bias(0.0f),
-      ay_bias(0.0f),
-      az_bias(0.0f),
       gx_bias(0.0f),
       gy_bias(0.0f),
-      gz_bias(0.0f) {
+      gz_bias(0.0f),
+      batteryVoltage(0.0f),
+      batteryPercentage(0),
+      lastBatteryUpdateTime(0) {
 
     // Initialize arrays
     for (int i = 0; i < 3; i++) {
-        accelData[i] = 0;
+        //accelData[i] = 0;
         gyroData[i] = 0;
     }
 
@@ -45,10 +45,7 @@ Sensors::Sensors(Config* config)
         gxSamples[i] = 0.0f;
     }
 
-    ax = ay = az = 0.0f;
-    gx = gy = gz = 0.0f;
-    sampleIndex = 0;
-    lastUpdateTime = 0;
+    //ax = ay = az = 0.0f;
     gx = gy = gz = 0.0f;
     sampleIndex = 0;
     lastUpdateTime = 0;
@@ -71,21 +68,26 @@ void Sensors::begin() {
 
     // Give sensor time to power up
     delay(100);
+    mpu = new MPU6050(Wire);
+
+    mpu->begin();
+    // mpu->begin();
+    imuInitialized = true;
+    mpu->setGyroOffsets(0, 0, 0);
+    calibrateIMU();
 
     // Initialize MPU6050
-    if (mpu.begin(0x68, &Wire)) {
+    //if (mpu.begin(0x68, &Wire)) {
+    //if (mpu->begin()) {
         // Configure MPU6050
-        mpu.setAccelerometerRange(MPU6050_RANGE_2_G);
-        mpu.setGyroRange(MPU6050_RANGE_250_DEG);
-        mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-        imuInitialized = true;
-
+    //    imuInitialized = true;
+    //    mpu->setGyroOffsets(0, 0, 0);
         // Calibrate IMU to estimate gyro bias
-        calibrateIMU();
-    } else {
+    //    calibrateIMU();
+    //} else {
         // Failed to initialize MPU6050
-        imuInitialized = false;
-    }
+    //    imuInitialized = false;
+    //}
 
     // Initialize Kalman filter
     kalmanFilter.begin();
@@ -199,6 +201,44 @@ void Sensors::setMotors(Motors* m) {
 }
 
 // Update the Kalman filter with the latest sensor readings
+// Update battery status
+void Sensors::updateBatteryStatus() {
+    unsigned long currentTime = millis();
+
+    // Update every 1000ms (1 second)
+    if (currentTime - lastBatteryUpdateTime >= 1000) {
+        // Read the analog value from the voltage divider
+        int vRaw = analogRead(config->getPinVoltageDivider());
+
+        // Convert to voltage (assuming 3.3V reference and 12-bit ADC)
+        float voltage = vRaw * (3.3 / 4095.0);
+
+        // Calculate battery percentage (constrained between 2.77V and 3.23V)
+        batteryPercentage = map(constrain(voltage * 100, 277, 323), 277, 323, 0, 100);
+
+        // Store the voltage
+        batteryVoltage = voltage;
+
+        // Update timestamp
+        lastBatteryUpdateTime = currentTime;
+
+        // Send battery data to phone if communication is available
+        if (communication != nullptr) {
+            communication->sendData("v" + String(batteryPercentage));
+        }
+    }
+}
+
+// Get battery voltage
+float Sensors::getBatteryVoltage() {
+    return batteryVoltage;
+}
+
+// Get battery percentage
+int Sensors::getBatteryPercentage() {
+    return batteryPercentage;
+}
+
 void Sensors::updateKalmanFilter() {
     unsigned long currentTime = millis();
 
@@ -217,7 +257,8 @@ void Sensors::updateKalmanFilter() {
         // Only integrate IMU data if the IMU is initialized
         if (imuInitialized && lastAccelTime > 0) {
             float dt = (currentTime - lastAccelTime) / 1000.0f; // Convert to seconds
-            v_imu += ax * dt; // Simple integration of x-axis acceleration
+            //v_imu += ax * dt; // Simple integration of x-axis acceleration
+            // TODO: commented out this line, as ax is not available
         }
         lastAccelTime = currentTime;
 
@@ -327,18 +368,12 @@ void Sensors::readIMU() {
         return;
     }
 
-    sensors_event_t a, g, temp;
-    mpu.getEvent(&a, &g, &temp);
-
-    // Apply bias correction to accelerometer readings
-    ax = a.acceleration.x - 9.81 - ax_bias; // Subtract gravity from x-axis (up-axis for SatiBot)
-    ay = a.acceleration.y - ay_bias;
-    az = a.acceleration.z - az_bias;
+    mpu->update();
 
     // Apply bias correction to gyroscope readings
-    gx = g.gyro.x - gx_bias;
-    gy = g.gyro.y - gy_bias;
-    gz = g.gyro.z - gz_bias;
+    gx = radians(mpu->getGyroX() - gx_bias);
+    gy = radians(mpu->getGyroY() - gy_bias);
+    gz = radians(mpu->getGyroZ() - gz_bias);
 }
 
 // Update IMU reading - called by timer every 2ms
@@ -397,32 +432,16 @@ void Sensors::calibrateIMU() {
         return;
     }
 
-    const int calibSamples = 100;
-    float axSum = 0.0, aySum = 0.0, azSum = 0.0;
-    float gxSum = 0.0, gySum = 0.0, gzSum = 0.0;
+    const int calibSamples = 600;
+    float gxSum = 0.0f, gySum = 0.0f, gzSum = 0.0f;
 
-    // Take multiple samples to get stable bias estimates
     for (int i = 0; i < calibSamples; i++) {
-        sensors_event_t a, g, temp;
-        mpu.getEvent(&a, &g, &temp);
-
-        // Sum accelerometer readings (x-axis is now the up-axis)
-        axSum += a.acceleration.x - 9.81; // Subtract gravity from x-axis
-        aySum += a.acceleration.y;
-        azSum += a.acceleration.z;
-
-        // Sum gyroscope readings
-        gxSum += g.gyro.x;
-        gySum += g.gyro.y;
-        gzSum += g.gyro.z;
-
-        delay(10);
+        mpu->update();
+        gxSum += mpu->getGyroX();
+        gySum += mpu->getGyroY();
+        gzSum += mpu->getGyroZ();
+        delay(5);
     }
-
-    // Calculate average biases
-    ax_bias = axSum / calibSamples;
-    ay_bias = aySum / calibSamples;
-    az_bias = azSum / calibSamples;
 
     gx_bias = gxSum / calibSamples;
     gy_bias = gySum / calibSamples;
