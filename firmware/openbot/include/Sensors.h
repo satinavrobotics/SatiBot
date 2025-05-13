@@ -3,8 +3,7 @@
 
 #include "Config.h"
 #include <Wire.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
+#include <MPU6050_light.h>
 #include "KalmanFilter.h"
 
 // Forward declarations to avoid circular dependencies
@@ -42,12 +41,13 @@ public:
     float getFusedAngularVelocity();
     float getFusedLinearVelocity();
 
+    // Battery monitoring methods
+    void updateBatteryStatus();
+    float getBatteryVoltage();
+    int getBatteryPercentage();
+
     // Getters for sensor data
-    int16_t* getAccelData() { return accelData; }
     int16_t* getGyroData() { return gyroData; }
-    float getAx() { return ax; }
-    float getAy() { return ay; }
-    float getAz() { return az; }
     float getGx() { return gx; }
     float getGy() { return gy; }
     float getGz() { return gz; }
@@ -69,14 +69,15 @@ private:
     Motors* motors; // Pointer to motors object
 
     // IMU sensor
-    Adafruit_MPU6050 mpu;
+    MPU6050* mpu;
     bool imuInitialized;
 
     // IMU data
-    int16_t accelData[3];
+    //int16_t accelData[3];
     int16_t gyroData[3];
-    float ax, ay, az, gx, gy, gz; // acceleration (m/s²), gyro (rad/s)
-    float ax_bias, ay_bias, az_bias; // Accelerometer bias values
+    //float ax, ay, az,
+    float gx, gy, gz; // acceleration (m/s²), gyro (rad/s)
+    //float ax_bias, ay_bias, az_bias; // Accelerometer bias values
     float gx_bias, gy_bias, gz_bias; // Gyroscope bias values
 
     // Odometry data
@@ -116,6 +117,11 @@ private:
     // Kalman filter
     KalmanFilter kalmanFilter;
     unsigned long lastKalmanUpdateTime;
+
+    // Battery monitoring
+    float batteryVoltage;
+    int batteryPercentage;
+    unsigned long lastBatteryUpdateTime;
 };
 
 // Declare static instance pointer for interrupt handlers

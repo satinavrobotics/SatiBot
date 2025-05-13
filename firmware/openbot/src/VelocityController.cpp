@@ -56,7 +56,8 @@ float VelocityController::getKd() const {
 }
 
 void VelocityController::setTargetAngularVelocity(float targetVelocity) {
-    targetAngularVelocity = targetVelocity / 255.0f / 10.0f;
+    //targetAngularVelocity = targetVelocity / 255.0f / 10.0f;
+    targetAngularVelocity = targetVelocity / 255.0f / 2.0f;
 
     float targetLinear = getTargetLinearVelocity() / 255.0f;
     if (abs(targetLinear) > 0.01f && abs(targetAngularVelocity) > 0.001f) {
@@ -166,8 +167,8 @@ void VelocityController::update() {
     float error = targetHeading - heading;
 
     // Wrap the error to the range [-PI, PI]
-    float threshold1 = 0.2f;
-    float threshold2 = 0.4f;
+    float threshold1 = 2.0f;//0.2f;
+    float threshold2 = 3.0f;//0.4f;
     if (error > threshold1) {
         if (error > threshold2) {
             reset();

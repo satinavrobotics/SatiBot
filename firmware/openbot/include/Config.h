@@ -56,11 +56,15 @@ public:
     int getPinDirectionL() const;
     int getPinDirectionR() const;
 
+    int getPinStopLeft() const;
+    int getPinStopRight() const;
+
     // Sensor pins
     int getPinHallL() const;
     int getPinHallR() const;
     int getPinSdaIMU() const;
     int getPinSclIMU() const;
+    int getPinVoltageDivider() const;
 
     // Global settings
     bool isNoPhoneMode() const;
@@ -93,12 +97,16 @@ private:
     int pinPwmR2;
     int pinDirectionL;
     int pinDirectionR;
+    int pinStopLeft;
+    int pinStopRight;
 
     // Sensor pins
     int pinHallL;
     int pinHallR;
     int pinSdaIMU;
     int pinSclIMU;
+    int pinVoltageDivider;
+
 
     // Global settings
     bool noPhoneMode;

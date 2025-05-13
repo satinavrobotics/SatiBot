@@ -40,8 +40,8 @@ void Motors::updateVehicle(float normalizedLinearVelocity, float headingAdjustme
             // 2.0 is handpicked value
             float scale = 6.5f * (abs(normalizedLinearVelocity) + 0.75f);
             float adjustment = headingAdjustment * scale;
-            leftPwm = (int)(scaledLinearVelocity + adjustment);
-            rightPwm = (int)(scaledLinearVelocity - adjustment);
+            leftPwm = (int)(scaledLinearVelocity - adjustment);
+            rightPwm = (int)(scaledLinearVelocity + adjustment);
             if (scaledLinearVelocity > 0) {
                 leftPwm = constrain(leftPwm, 0, 255);
                 rightPwm = constrain(rightPwm, 0, 255);
