@@ -7,8 +7,8 @@ class Motors {
 public:
     Motors(Config* config);
 
-    // New method to update vehicle using normalized linear velocity and heading adjustment
-    void updateVehicle(float normalizedLinearVelocity, float headingAdjustment);
+    // Method to update vehicle using normalized linear velocity, heading adjustment, and noControl flag
+    void updateVehicle(float normalizedLinearVelocity, float headingAdjustment, bool noControl = false);
 
     // Get current PWM values (for SatiBot V1)
     int getCurrentPwmLeft() const;

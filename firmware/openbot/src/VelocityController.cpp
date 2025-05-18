@@ -6,7 +6,7 @@ VelocityController::VelocityController(Config* config, Motors* motors, Sensors* 
       sensors(sensors),
       kp(20.0f),          // Default proportional gain (from cseled_test)
       ki(0.0f),           // Default integral gain (not used in cseled_test)
-      kd(2.0f),           // Default derivative gain (from cseled_test)
+      kd(4.0f),           // Default derivative gain (from cseled_test)
       targetAngularVelocity(0.0f),
       targetLinearVelocity(0.0f),
       currentLinearVelocity(0.0f),
@@ -18,6 +18,7 @@ VelocityController::VelocityController(Config* config, Motors* motors, Sensors* 
       headingAdjustment(0.0f),
       heading(0.0f),
       targetHeading(0.0f),
+      noControl(false),
       lastUpdateTime(0),
       previousUpdateTime(0),
       updateInterval(100),  // 50ms update interval (more frequent than before)
@@ -59,16 +60,16 @@ void VelocityController::setTargetAngularVelocity(float targetVelocity) {
     //targetAngularVelocity = targetVelocity / 255.0f / 10.0f;
     targetAngularVelocity = targetVelocity / 255.0f / 2.0f;
 
-    float targetLinear = getTargetLinearVelocity() / 255.0f;
+    float targetLinear = getTargetLinearVelocity();
     if (abs(targetLinear) > 0.01f && abs(targetAngularVelocity) > 0.001f) {
         float scale = 1.0f - abs(targetLinear);
         targetAngularVelocity *= scale;
     }
 
-    if (targetLinear < 0) {
-        targetAngularVelocity *= -1.0f;
-    }
-    
+    //if (targetLinear < 0) {
+    //    targetAngularVelocity *= -1.0f;
+    //}
+
     // With direct integration, we don't need to update target heading immediately
     // It will be updated in the next update() call
 
@@ -84,7 +85,7 @@ float VelocityController::getTargetAngularVelocity() const {
 }
 
 void VelocityController::setTargetLinearVelocity(float targetVelocity) {
-    targetLinearVelocity = targetVelocity;
+    targetLinearVelocity = targetVelocity / 255.0f;
     // With ramping, we don't immediately update the normalized linear velocity
     // It will be updated gradually through the updateRampedLinearVelocity method
 
@@ -112,6 +113,9 @@ float VelocityController::getTargetHeading() const {
     return targetHeading;
 }
 
+bool VelocityController::getNoControl() const {
+    return noControl;
+}
 
 
 void VelocityController::update() {
@@ -142,23 +146,25 @@ void VelocityController::update() {
     updateHeading(omega);
 
     // Update ramped linear velocity (always do this to ensure smooth ramping)
-    //updateRampedLinearVelocity();
-    normalizedLinearVelocity = targetLinearVelocity / 255.0f;
+    updateRampedLinearVelocity();
+    //normalizedLinearVelocity = targetLinearVelocity / 255.0f;
 
     // Check if both target angular velocity and linear velocity are near zero
-    // Only reset heading when the robot is completely stopped
+    // Set noControl flag when the robot has no target velocities
     if (abs(targetAngularVelocity) < 0.001f && abs(targetLinearVelocity) < 0.001f) {
-        // Set heading adjustment to zero to prevent turning
-        headingAdjustment = 0.0f;
-        // Reset heading and targetHeading to prevent accumulated drift
-        // Only when the robot is completely stopped (both angular and linear velocity near zero)
-        // This ensures they stay synchronized when movement resumes
-        //    heading = 0.0f;
-        //    targetHeading = 0.0f;
-        // Skip the rest of the angular velocity calculations
-        lastUpdateTime = currentTime;
-        return;
-   }
+        // Set noControl flag to true
+        // noControl = true;
+        // Continue with heading adjustment calculation instead of returning
+        // This will allow the robot to adjust its heading using only the forward wheel
+        if (!noControl) {
+            heading = targetHeading;
+            lastError = 0.0f;
+        }
+        noControl = true;
+    } else {
+        // Normal control mode
+        noControl = false;
+    }
 
     // Update target heading based on target angular velocity
     updateTargetHeading();
@@ -176,7 +182,7 @@ void VelocityController::update() {
             error = threshold1;
         }
     }
-    if (error < -threshold1) {
+    else if (error < -threshold1) {
         if (error < threshold2) {
             reset();
         } else {
@@ -213,6 +219,7 @@ void VelocityController::reset() {
     normalizedLinearVelocity = 0.0f;
     heading = 0.0f;
     targetHeading = heading; // Reset target heading to match current heading
+    noControl = false; // Reset noControl flag
     measuredDt = updateInterval / 1000.0f; // Reset to default dt value
 
     // Set heading adjustment to zero when reset is called
@@ -233,7 +240,7 @@ void VelocityController::updateHeading(float omega) {
     // Normalize heading to keep it within a reasonable range
     // This prevents potential issues with very large heading values over time
     // 2*PI radians = 360 degrees = one full rotation
-    //while (heading > TWO_PI) 
+    //while (heading > TWO_PI)
     //{
     //    heading -= TWO_PI;
     //    targetHeading -= TWO_PI;
@@ -242,7 +249,7 @@ void VelocityController::updateHeading(float omega) {
     //{
     //    heading += TWO_PI ;
     //    targetHeading += TWO_PI;
-    //} 
+    //}
 }
 
 void VelocityController::updateTargetHeading() {
@@ -253,18 +260,18 @@ void VelocityController::updateTargetHeading() {
 
     // Normalize target heading to keep it within a reasonable range
     // Using the predefined TWO_PI constant from Arduino.h
-    //while (targetHeading > TWO_PI) 
+    //while (targetHeading > TWO_PI)
     //{
     //    targetHeading -= TWO_PI;
     //    heading -= TWO_PI;
     //}
 
-    //while (targetHeading < -TWO_PI) 
+    //while (targetHeading < -TWO_PI)
     //{
     //    targetHeading += TWO_PI;
     //    heading += TWO_PI;
     //}
-    
+
 }
 
 void VelocityController::updateCurrentLinearVelocity() {
@@ -281,24 +288,52 @@ void VelocityController::updateCurrentLinearVelocity() {
 
 void VelocityController::updateRampedLinearVelocity() {
     // Update current linear velocity first
-    updateCurrentLinearVelocity();
+    // updateCurrentLinearVelocity();
 
-    // Calculate the ramp increment based on acceleration rate and measured dt
-    float rampIncrement = LINEAR_ACCELERATION_RATE * measuredDt;
+    // If we're already at the target, no need to ramp
+    if (rampedLinearVelocity == targetLinearVelocity) {
+        normalizedLinearVelocity = rampedLinearVelocity;
+        return;
+    }
 
-    // Determine direction of ramping
-    if (rampedLinearVelocity < targetLinearVelocity) {
-        // Ramp up
-        rampedLinearVelocity += rampIncrement;
+    // Calculate the change needed
+    float change = targetLinearVelocity - rampedLinearVelocity;
 
+    // Determine if we're speeding up or slowing down
+    bool isSpeedingUp = false;
+
+    // If both values have the same sign (both positive or both negative)
+    if ((rampedLinearVelocity >= 0 && targetLinearVelocity >= 0) ||
+        (rampedLinearVelocity <= 0 && targetLinearVelocity <= 0)) {
+        // We're speeding up if the absolute value is increasing
+        isSpeedingUp = abs(targetLinearVelocity) > abs(rampedLinearVelocity);
+    } else {
+        // If signs are different, we're always speeding up when moving away from zero
+        isSpeedingUp = false;
+    }
+
+    // Choose appropriate rate based on whether we're speeding up or slowing down
+    float rampRate;
+    if (isSpeedingUp) {
+        // Moving away from zero (speeding up) - use acceleration rate
+        rampRate = LINEAR_ACCELERATION_RATE;
+    } else {
+        // Moving towards zero (slowing down) - use deceleration rate
+        rampRate = LINEAR_DECELERATION_RATE;
+    }
+
+    // Calculate increment based on selected rate
+    float increment = rampRate * measuredDt;
+
+    // Apply the increment in the correct direction
+    if (change > 0) {
+        rampedLinearVelocity += increment;
         // Ensure we don't overshoot
         if (rampedLinearVelocity > targetLinearVelocity) {
             rampedLinearVelocity = targetLinearVelocity;
         }
-    } else if (rampedLinearVelocity > targetLinearVelocity) {
-        // Ramp down
-        rampedLinearVelocity -= rampIncrement;
-
+    } else {
+        rampedLinearVelocity -= increment;
         // Ensure we don't undershoot
         if (rampedLinearVelocity < targetLinearVelocity) {
             rampedLinearVelocity = targetLinearVelocity;
