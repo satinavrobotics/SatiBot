@@ -73,7 +73,7 @@ void setup() {
   velocityController->setKp(7.0f);
   velocityController->setKi(0.0f);  // Not used in cseled_test
   //velocityController->setKd(2.0f);
-  velocityController->setKd(2.0f);
+  velocityController->setKd(0.8f);
 
   // Initialize communication with VelocityController
   communication = new Communication(config, velocityController, sensors);
@@ -202,7 +202,7 @@ void loop() {
   float targetHeading = velocityController->getTargetHeading();
 
   // Send the heading adjustment value to the controller
-  communication->sendData("h" + String(headingAdjustment, 6));
+    communication->sendData("h" + String(headingAdjustment, 6));
 
   // Send the current heading and target heading values
   communication->sendData("ch" + String(currentHeading, 6));
@@ -215,9 +215,8 @@ void loop() {
   communication->sendData("a" + String(velocityController->getTargetAngularVelocity(), 6));
 
   // Apply the normalized linear velocity and heading adjustment to the motors
-  // The VelocityController sets heading adjustment to zero when angular velocity is zero
-  // Linear velocity will still ramp smoothly
-  motors->updateVehicle(normalizedLinearVelocity, headingAdjustment);
+  // Pass the noControl flag to use the special control mechanism when there's no target velocity
+  motors->updateVehicle(normalizedLinearVelocity, headingAdjustment, velocityController->getNoControl());
 
   // Update Kalman filter
   //sensors->updateKalmanFilter();

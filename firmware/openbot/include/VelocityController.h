@@ -51,6 +51,9 @@ public:
     // Get the target heading value
     float getTargetHeading() const;
 
+    // Get the noControl flag value
+    bool getNoControl() const;
+
     // Controller is always enabled
 
     // Reset the controller (clear accumulated error)
@@ -78,6 +81,7 @@ private:
     float headingAdjustment;      // Current heading adjustment value
     float heading;                // Current heading in radians
     float targetHeading;          // Target heading in radians
+    bool noControl;               // Flag for no target velocity control mode
 
     // No longer needed as IMU sampling is handled by Sensors class
 
@@ -92,7 +96,8 @@ private:
     // Constants
     static constexpr float MAX_INTEGRAL_ERROR = 10.0f;  // Prevent integral windup
     static constexpr float MAX_OUTPUT = 255.0f;         // Maximum output value
-    static constexpr float LINEAR_ACCELERATION_RATE = 10.0f; // Acceleration rate for linear velocity (units/second)
+    static constexpr float LINEAR_ACCELERATION_RATE = 0.5f; // Acceleration rate for linear velocity (units/second)
+    static constexpr float LINEAR_DECELERATION_RATE = 0.9f; // Deceleration rate for linear velocity (units/second) - higher than acceleration
 
     // Helper methods
     float getFilteredYawRate();                         // Get filtered yaw rate from IMU via Sensors
