@@ -12,8 +12,7 @@ app.post('/api/createToken', async (req, res) => {
   console.log("Creating token for " + participantName + " at " + roomName );
   
   try {
-    const ttl = parseInt(process.env.LIVEKIT_TTL, 10) || 6000; // Default to 100 minutes (6000 sec)
-    const expirationTime = Math.floor(Date.now() / 1000) + ttl;
+    const ttl = parseInt(process.env.LIVEKIT_TTL, 10); // Default to 10hours (36000 seconds)
 
     const at = new AccessToken(process.env.LIVEKIT_API_KEY, process.env.LIVEKIT_API_SECRET, {
       identity: participantName,
@@ -26,7 +25,7 @@ app.post('/api/createToken', async (req, res) => {
     
     res.json({
       token,
-      expiration_time: expirationTime,
+      ttl: ttl,
       server_url: process.env.LIVEKIT_SERVER_URL
     });
   } catch (error) {

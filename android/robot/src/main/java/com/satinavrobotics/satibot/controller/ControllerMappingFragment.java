@@ -14,8 +14,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import com.google.android.material.internal.ViewUtils;
-import org.openbot.R;
-import org.openbot.databinding.FragmentControllerMappingBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentControllerMappingBinding;
 
 import com.satinavrobotics.satibot.env.GameController;
 import com.satinavrobotics.satibot.utils.Constants;
