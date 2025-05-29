@@ -17,9 +17,7 @@ import com.google.ar.core.Config;
 import com.google.ar.core.Config.InstantPlacementMode;
 import com.google.ar.core.Config.LightEstimationMode;
 import com.google.ar.core.Config.PlaneFindingMode;
-import com.google.ar.core.Earth;
 import com.google.ar.core.Frame;
-import com.google.ar.core.GeospatialPose;
 import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.TrackingFailureReason;
@@ -36,19 +34,24 @@ import com.google.firebase.firestore.FirebaseFirestore;
 import com.satinavrobotics.satibot.env.SharedPreferencesManager;
 import com.satinavrobotics.satibot.mapManagement.Map;
 import com.satinavrobotics.satibot.mapManagement.MapResolvingManager;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 import com.satinavrobotics.satibot.pointGoalNavigation.ArCoreListener;
 import com.satinavrobotics.satibot.pointGoalNavigation.CameraIntrinsics;
 import com.satinavrobotics.satibot.pointGoalNavigation.ImageFrame;
-import com.satinavrobotics.satibot.pointGoalNavigation.NavigationPoses;
-import com.satinavrobotics.satibot.pointGoalNavigation.rendering.BackgroundRenderer;
 import com.satinavrobotics.satibot.pointGoalNavigation.rendering.DisplayRotationHelper;
-import com.satinavrobotics.satibot.pointGoalNavigation.rendering.TwoDRenderer;
+import com.satinavrobotics.satibot.robot.rendering.ARCoreRenderer;
+import com.satinavrobotics.satibot.robot.rendering.ArCoreProcessor;
+import com.satinavrobotics.satibot.robot.rendering.DefaultArCoreProcessor;
+import com.satinavrobotics.satibot.robot.rendering.LiveKitARCoreRenderer;
+import com.satinavrobotics.satibot.robot.rendering.NullARCoreRenderer;
+import com.satinavrobotics.satibot.robot.rendering.SimpleARCoreRenderer;
 
 import livekit.org.webrtc.JavaI420Buffer;
 import livekit.org.webrtc.VideoFrame;
 import timber.log.Timber;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -66,6 +69,7 @@ import javax.microedition.khronos.opengles.GL10;
  *       <code>resume(), pause(), closeSession(), detachAnchors(), getStartPose(), setStartAnchorAtCurrentPose(), getTargetPose(), setTargetAnchor(Pose), setTargetAnchorAtCurrentPose(), setArCoreListener(), removeArCoreListener(), isGeospatialModeAvailable(), getGeospatialPose()</code>.</li>
  *   <li>Implements VideoCapturer so that it can capture frames from ARCore for WebRTC (by converting images to I420).</li>
  *   <li>Uses a single GLSurfaceView.Renderer to drive both ARCore updates and video capture.</li>
+ *   <li>Uses an ArCoreProcessor to process frames before rendering.</li>
  * </ul>
  *
  * External helper classes such as ImageFrame, NavigationPoses, CameraIntrinsics, and ArCoreListener
@@ -79,27 +83,68 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
     private final DisplayRotationHelper displayRotationHelper;
     private final Context context;
     private final GLSurfaceView glSurfaceView;
-    private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
-    private final TwoDRenderer twoDRenderer = new TwoDRenderer();
     private float gpuTextureAspectRatio = 16.0f / 9.0f;
     private final Handler handlerMain;
     private ArCoreListener arCoreListener = null;
-
-    // Anchor and pose fields for navigation.
-    private Anchor startAnchor, targetAnchor;
     private Pose currentPose;
-    private Pose startPose = null, targetPose = null;
-    private final float[] anchorMatrix = new float[16];
 
-    // Update the constructor
+    // Renderer and Processor
+    private ARCoreRenderer renderer;
+    private ArCoreProcessor processor;
+    private boolean renderingEnabled = true;
+
+    /**
+     * Constructor with default renderer.
+     */
     public ArCoreHandler(Context context, GLSurfaceView glSurfaceView, Handler handlerMain) {
+        this(context, glSurfaceView, handlerMain, true);
+    }
+
+    /**
+     * Renderer type options
+     */
+    public enum RendererType {
+        NULL,       // No rendering
+        SIMPLE,     // Basic rendering
+        LIVEKIT     // Optimized for streaming
+    }
+
+    /**
+     * Constructor with option to enable/disable rendering.
+     */
+    public ArCoreHandler(Context context, GLSurfaceView glSurfaceView, Handler handlerMain, boolean renderingEnabled) {
+        this(context, glSurfaceView, handlerMain, renderingEnabled ? RendererType.LIVEKIT : RendererType.NULL);
+    }
+
+    /**
+     * Constructor with specific renderer type.
+     */
+    public ArCoreHandler(Context context, GLSurfaceView glSurfaceView, Handler handlerMain, RendererType rendererType) {
         this.context = context;
         this.glSurfaceView = glSurfaceView;
         this.handlerMain = handlerMain;
         this.preferencesManager = new SharedPreferencesManager(context);
         this.db = FirebaseFirestore.getInstance();
-    
-        // Existing initialization code...
+        this.renderingEnabled = rendererType != RendererType.NULL;
+
+        // Set up the appropriate renderer
+        switch (rendererType) {
+            case SIMPLE:
+                this.renderer = new SimpleARCoreRenderer();
+                break;
+            case LIVEKIT:
+                this.renderer = new LiveKitARCoreRenderer();
+                break;
+            case NULL:
+            default:
+                this.renderer = new NullARCoreRenderer();
+                break;
+        }
+
+        // Set up the default processor
+        this.processor = new DefaultArCoreProcessor();
+
+        // Set up GLSurfaceView
         glSurfaceView.setPreserveEGLContextOnPause(true);
         glSurfaceView.setEGLContextClientVersion(3);
         glSurfaceView.setEGLConfigChooser(8, 8, 8, 8, 16, 0);
@@ -109,32 +154,90 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         displayRotationHelper = new DisplayRotationHelper(context);
     }
 
+    /**
+     * Set a custom renderer.
+     *
+     * @param renderer The renderer to use
+     */
+    public void setRenderer(ARCoreRenderer renderer) {
+        this.renderer = renderer;
+        this.renderingEnabled = !(renderer instanceof NullARCoreRenderer);
+    }
 
-    private SharedPreferencesManager preferencesManager;
-    private FirebaseFirestore db;
-    private MapResolvingManager mapResolvingManager = new MapResolvingManager();
+    /**
+     * Set a custom processor.
+     *
+     * @param processor The processor to use
+     */
+    public void setProcessor(ArCoreProcessor processor) {
+        this.processor = processor;
+    }
+
+    /**
+     * Enable or disable rendering.
+     *
+     * @param enabled Whether rendering should be enabled
+     */
+    public void setRenderingEnabled(boolean enabled) {
+        setRendererType(enabled ? RendererType.LIVEKIT : RendererType.NULL);
+    }
+
+    /**
+     * Set the renderer type.
+     *
+     * @param rendererType The type of renderer to use
+     */
+    public void setRendererType(RendererType rendererType) {
+        this.renderingEnabled = rendererType != RendererType.NULL;
+
+        switch (rendererType) {
+            case SIMPLE:
+                this.renderer = new SimpleARCoreRenderer();
+                break;
+            case LIVEKIT:
+                this.renderer = new LiveKitARCoreRenderer();
+                break;
+            case NULL:
+            default:
+                this.renderer = new NullARCoreRenderer();
+                break;
+        }
+    }
+
+
+    private final SharedPreferencesManager preferencesManager;
+    private final FirebaseFirestore db;
+    private final MapResolvingManager mapResolvingManager = new MapResolvingManager();
     private boolean isResolvingAnchors = false;
     private int resolvedAnchorsCount = 0;
     private int totalAnchorsToResolve = 0;
     private Map currentMap;
+
+    /**
+     * Interface for receiving anchor resolution updates
+     */
+    public interface AnchorResolutionListener {
+        /**
+         * Called when anchor resolution status changes
+         * @param resolvedCount Number of anchors resolved so far
+         * @param totalCount Total number of anchors to resolve
+         */
+        void onAnchorResolutionUpdate(int resolvedCount, int totalCount);
+    }
+
+    private AnchorResolutionListener anchorResolutionListener;
 
 
     // ===== ARCore Public Methods (Interface same as original ArCore class) =====
 
     /**
      * Resumes the ARCore session.
-     *
-     * @throws UnavailableSdkTooOldException
-     * @throws UnavailableDeviceNotCompatibleException
-     * @throws UnavailableArcoreNotInstalledException
-     * @throws UnavailableApkTooOldException
-     * @throws CameraNotAvailableException
      */
     public void resume() throws UnavailableSdkTooOldException, UnavailableDeviceNotCompatibleException,
             UnavailableArcoreNotInstalledException, UnavailableApkTooOldException, CameraNotAvailableException {
         session = new Session(context);
         setConfig();
-        
+
         setCameraConfig();
         session.resume();
         glSurfaceView.onResume();
@@ -143,110 +246,130 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         // Load and resolve map anchors
         loadSelectedMap();
     }
+
     public void pause() {
         if (session != null) {
-            displayRotationHelper.onPause();
-            glSurfaceView.onPause();
-            session.pause();
-            
-            // Clean up map resolving manager
-            mapResolvingManager.clear();
-            isResolvingAnchors = false;
+            try {
+                // First pause the display rotation helper and GLSurfaceView
+                displayRotationHelper.onPause();
+                glSurfaceView.onPause();
+
+                // Then pause the session with error handling
+                try {
+                    session.pause();
+                } catch (Exception e) {
+                    // Catch and log any exceptions during session pause
+                    Timber.e(e, "Error pausing ARCore session");
+                }
+
+                // Clean up map resolving manager
+                mapResolvingManager.clear();
+                isResolvingAnchors = false;
+            } catch (Exception e) {
+                // Catch any other exceptions during the entire pause process
+                Timber.e(e, "Exception during ARCore pause");
+            }
         }
     }
 
     public void closeSession() {
         if (session != null) {
             runOnMainThread(() -> {
-                pause();
-                mapResolvingManager.clear();
-                if (session != null)
-                    session.close();
-                session = null;
+                try {
+                    // First pause the session
+                    pause();
+                    mapResolvingManager.clear();
+
+                    // Add a small delay before closing the session to allow camera resources to be released
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+
+                    // Close the session with error handling
+                    if (session != null) {
+                        try {
+                            session.close();
+                        } catch (Exception e) {
+                            // Catch and log any exceptions during session close
+                            Timber.e(e, "Error closing ARCore session");
+                        } finally {
+                            session = null;
+                        }
+                    }
+                } catch (Exception e) {
+                    // Catch any other exceptions during the entire close process
+                    Timber.e(e, "Exception during ARCore session cleanup");
+                    session = null;
+                }
             });
         }
     }
-
-    // ===== PointGoalNavigation Methods =====
-
-    public Pose getStartPose() {
-        return (startAnchor == null) ? null : startAnchor.getPose();
-    }
-    public Pose getTargetPose() {
-        return (targetAnchor != null) ? targetAnchor.getPose() : null;
-    }
-    public void setStartAnchorAtCurrentPose() {
-        if (currentPose != null && session != null) {
-            startAnchor = session.createAnchor(currentPose);
-        }
-    }
-    public void setTargetAnchor(Pose pose) {
-        if (session != null) {
-            targetAnchor = session.createAnchor(pose);
-        }
-    }
-    public void setTargetAnchorAtCurrentPose(Pose pose) {
-        if (currentPose != null && session != null) {
-            targetAnchor = session.createAnchor(currentPose);
-        }
-    }
-    public void detachAnchors() {
-        if (session != null) {
-            for (Anchor anchor : session.getAllAnchors()) {
-                anchor.detach();
-            }
-        }
-        startAnchor = null;
-        targetAnchor = null;
-    }
-
 
     public void setArCoreListener(ArCoreListener listener) {
         this.arCoreListener = listener;
     }
     public void removeArCoreListener() {this.arCoreListener = null;}
 
-    public boolean isGeospatialModeAvailable() {
-        if (session == null) return false;
-        Earth earth = session.getEarth();
-        return (earth != null && earth.getTrackingState() == TrackingState.TRACKING);
+    public Session getSession() {
+        return session;
     }
-    public GeospatialPose getGeospatialPose() {
-        if (session == null) return null;
-        Earth earth = session.getEarth();
-        if (earth != null && earth.getTrackingState() == TrackingState.TRACKING) {
-            return earth.getCameraGeospatialPose();
-        }
-        return null;
+
+    /**
+     * Sets the anchor resolution listener
+     * @param listener The listener to receive anchor resolution updates
+     */
+    public void setAnchorResolutionListener(AnchorResolutionListener listener) {
+        this.anchorResolutionListener = listener;
+    }
+
+    /**
+     * Gets the current map
+     * @return The current map
+     */
+    public Map getCurrentMap() {
+        return currentMap;
+    }
+
+    /**
+     * Gets the number of resolved anchors
+     * @return The number of resolved anchors
+     */
+    public int getResolvedAnchorsCount() {
+        return resolvedAnchorsCount;
+    }
+
+    /**
+     * Gets the total number of anchors to resolve
+     * @return The total number of anchors to resolve
+     */
+    public int getTotalAnchorsToResolve() {
+        return totalAnchorsToResolve;
+    }
+
+    /**
+     * Gets the list of resolved anchors
+     * @return The list of resolved anchors
+     */
+    public List<MapResolvingManager.ResolvedAnchor> getResolvedAnchors() {
+        return mapResolvingManager.getResolvedAnchors();
     }
 
 
     // ===== GLSurfaceView.Renderer Methods =====
     @Override
     public void onSurfaceCreated(GL10 gl, EGLConfig config) {
-        GLES30.glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-
-        setupOffscreenRendering(640, 480);
-        setupPBOs();
-        // Initialize ARCore background rendering.
-        try {
-            backgroundRenderer.createOnGlThread(context);
-        } catch (IOException e) {
-            Timber.e(e, "Failed to create background renderer");
-        }
-        twoDRenderer.createOnGlThread(context, "render/gmap_marker.png");
+        // Initialize the renderer
+        renderer.onSurfaceCreated(gl, config, context);
     }
 
     @Override
     public void onSurfaceChanged(GL10 gl, int width, int height) {
         displayRotationHelper.onSurfaceChanged(width, height);
-        GLES30.glViewport(0, 0, width, height);
+        renderer.onSurfaceChanged(gl, width, height);
 
-        // Adjust the GLSurfaceView layout to maintain the aspect ratio.
-        ViewGroup.LayoutParams lp = glSurfaceView.getLayoutParams();
-        lp.height = height;
-        lp.width = (int) (lp.height * gpuTextureAspectRatio);
-        runOnMainThread(() -> glSurfaceView.setLayoutParams(lp));
+        // Don't modify the SurfaceView layout parameters to allow it to fill the screen
     }
 
     @Override
@@ -260,7 +383,8 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         // the video background can be properly adjusted.
         displayRotationHelper.updateSessionIfNeeded(session);
 
-        session.setCameraTextureName(backgroundRenderer.getTextureId());
+        // Set the camera texture name from the renderer
+        session.setCameraTextureName(renderer.getBackgroundTextureId());
 
         // Obtain the current frame from ARSession
         Frame frame;
@@ -301,12 +425,6 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
             });
         } else {
             currentPose = camera.getPose();
-            if (startAnchor != null) {
-                startPose = startAnchor.getPose();
-            }
-            if (targetAnchor != null) {
-                targetPose = targetAnchor.getPose();
-            }
 
             // Get image.
             // TODO: If needed, we could possibly implement some performance optimization here:
@@ -330,7 +448,7 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
                 runOnMainThread(() -> {
                             if (arCoreListener != null) {
                                 arCoreListener.onArCoreUpdate(
-                                        new NavigationPoses(currentPose, targetPose, startPose),
+                                        currentPose,
                                         imageFrame,
                                         new CameraIntrinsics(camera.getImageIntrinsics()),
                                         timestamp);
@@ -340,124 +458,37 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
          }
 
         // === Rendering (Preview & Overlays) ===
+        if (renderingEnabled) {
+            // Process the frame before rendering
+            ArCoreProcessor.ProcessedFrameData processedData = processor.update(
+                frame,
+                camera,
+                mapResolvingManager.getResolvedAnchors()
+            );
 
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, offscreenFramebuffer[0]);
-        GLES30.glViewport(0, 0, width, height);
+            // Draw the frame using the renderer with processed data
+            renderer.drawFrame(processedData);
 
-        // Clear the FBO
-        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT | GLES30.GL_DEPTH_BUFFER_BIT);
-
-        backgroundRenderer.draw(frame);
-
-        if (trackingState == TrackingState.TRACKING) {
-            // Get camera matrices
-            float[] projmtx = new float[16];
-            camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
-            float[] viewmtx = new float[16];
-            camera.getViewMatrix(viewmtx, 0);
-
-            // Render target anchor if exists
-            if (targetAnchor != null) {
-                renderAnchorMarker(targetAnchor.getPose(), viewmtx, projmtx);
+            // Now read pixels if needed (after all rendering is done)
+            ByteBuffer rgbaBuffer = renderer.readPixels();
+            // If we got a buffer, convert and send it
+            if (rgbaBuffer != null) {
+                runOnMainThread(() -> {
+                    if (arCoreListener != null) {
+                        try {
+                            VideoFrame.I420Buffer i420Buffer = toI420Buffer(rgbaBuffer, renderer.getWidth(), renderer.getHeight());
+                            if (i420Buffer != null) {
+                                arCoreListener.onRenderedFrame(i420Buffer, timestamp);
+                            } else {
+                                Timber.w("Failed to convert RGBA buffer to I420 format");
+                            }
+                        } catch (Exception e) {
+                            Timber.e(e, "Error processing rendered frame");
+                        }
+                    }
+                });
             }
-
-            // Render all resolved cloud anchors
-            List<MapResolvingManager.ResolvedAnchor> resolvedAnchors = mapResolvingManager.getResolvedAnchors();
-            if (resolvedAnchors != null && !resolvedAnchors.isEmpty()) {
-                for (MapResolvingManager.ResolvedAnchor resolvedAnchor : resolvedAnchors) {
-                    renderAnchorMarker(resolvedAnchor.getAnchor().getPose(), viewmtx, projmtx);
-                }
-            }
         }
-
-        // Read pixels using PBO
-        ByteBuffer rgbaBuffer = readPixels();
-
-        // Unbind FBO to revert to default framebuffer if needed
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
-
-        if (rgbaBuffer != null) {
-            runOnMainThread(() -> {
-                if (arCoreListener != null) {
-                    VideoFrame.I420Buffer i420Buffer = toI420Buffer(rgbaBuffer, width, height);
-                    arCoreListener.onRenderedFrame(i420Buffer, timestamp);
-                }
-            });
-        }
-    }
-
-    private int[] pboIds = new int[2];
-    private int currentPboIndex = 0;
-
-    private int[] offscreenFramebuffer = new int[1];
-    private int[] offscreenTexture = new int[1];
-    private int width, height; // Set these to your desired resolution
-
-    // Initialize PBOs
-    public void setupPBOs() {
-        GLES30.glGenBuffers(2, pboIds, 0);
-        int bufferSize = width * height * 4; // RGBA
-        for (int i = 0; i < 2; i++) {
-            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[i]);
-            GLES30.glBufferData(GLES30.GL_PIXEL_PACK_BUFFER, bufferSize, null, GLES30.GL_STREAM_READ);
-        }
-        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
-    }
-
-    // Read pixels asynchronously
-    public ByteBuffer readPixels() {
-        currentPboIndex = (currentPboIndex + 1) % 2;
-        int nextPboIndex = currentPboIndex;
-
-        // Read into the next PBO
-        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[nextPboIndex]);
-        GLES30.glReadPixels(0, 0, width, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, 0);
-
-        // Retrieve data from the current PBO
-        int dataPboIndex = (currentPboIndex + 1) % 2;
-        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, pboIds[dataPboIndex]);
-        ByteBuffer pixelBuffer = (ByteBuffer) GLES30.glMapBufferRange(
-                GLES30.GL_PIXEL_PACK_BUFFER, 0, width * height * 4, GLES30.GL_MAP_READ_BIT);
-
-        ByteBuffer resultBuffer = null;
-        if (pixelBuffer != null) {
-            resultBuffer = ByteBuffer.allocateDirect(pixelBuffer.remaining());
-            resultBuffer.put(pixelBuffer);
-            resultBuffer.rewind();
-            GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER);
-        }
-
-        GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0);
-        return resultBuffer;
-    }
-
-    // Initialize FBO and texture
-    public void setupOffscreenRendering(int width, int height) {
-        this.width = width;
-        this.height = height;
-
-        // Create FBO
-        GLES30.glGenFramebuffers(1, offscreenFramebuffer, 0);
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, offscreenFramebuffer[0]);
-
-        // Create texture
-        GLES30.glGenTextures(1, offscreenTexture, 0);
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, offscreenTexture[0]);
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0,
-                GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null);
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR);
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR);
-
-        // Attach texture to FBO
-        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0,
-                GLES30.GL_TEXTURE_2D, offscreenTexture[0], 0);
-
-        // Check FBO status
-        if (GLES30.glCheckFramebufferStatus(GLES30.GL_FRAMEBUFFER) != GLES30.GL_FRAMEBUFFER_COMPLETE) {
-            throw new RuntimeException("Framebuffer not complete");
-        }
-
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0);
     }
 
     /**
@@ -466,6 +497,24 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
      * @return a VideoFrame.I420Buffer containing the converted data.
      */
     public VideoFrame.I420Buffer toI420Buffer(ByteBuffer rgbaBuffer, int width, int height) {
+        // Validate input parameters
+        if (rgbaBuffer == null) {
+            Timber.e("RGBA buffer is null");
+            return null;
+        }
+
+        if (width <= 0 || height <= 0) {
+            Timber.e("Invalid dimensions: %dx%d", width, height);
+            return null;
+        }
+
+        // Make sure the buffer has enough data
+        int requiredBytes = width * height * 4;
+        if (rgbaBuffer.capacity() < requiredBytes) {
+            Timber.e("Buffer too small: capacity=%d, required=%d", rgbaBuffer.capacity(), requiredBytes);
+            return null;
+        }
+
         // Allocate an I420 buffer of the same dimensions.
         VideoFrame.I420Buffer i420Buffer = JavaI420Buffer.allocate(width, height);
 
@@ -479,8 +528,16 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
 
         // Copy the RGBA data into a byte array.
         byte[] rgbaData = new byte[width * height * 4];
+
+        // Reset position to ensure we read from the beginning
         rgbaBuffer.position(0);
-        rgbaBuffer.get(rgbaData);
+
+        try {
+            rgbaBuffer.get(rgbaData);
+        } catch (Exception e) {
+            Timber.e(e, "Error reading from RGBA buffer");
+            return null;
+        }
 
         // --- Convert Y plane with vertical flip ---
         // For output row r (0 is top), use source row = (height - 1 - r)
@@ -613,19 +670,13 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         return (size1.getHeight() * size1.getWidth() < size2.getHeight() * size2.getWidth());
     }
 
-    private boolean isLarger(Size size1, Size size2) {
-        return (size1.getHeight() * size1.getWidth() > size2.getHeight() * size2.getWidth());
-    }
-
     private boolean is640x480(Size size) {
         return (size.getWidth() == 640 && size.getHeight() == 480);
     }
 
     private void setSurfaceViewAspectRatio(float aspectRatio) {
+        // Just store the aspect ratio but don't modify the SurfaceView layout
         gpuTextureAspectRatio = aspectRatio;
-        ViewGroup.LayoutParams lp = glSurfaceView.getLayoutParams();
-        lp.width = (int) (lp.height * gpuTextureAspectRatio);
-        runOnMainThread(() -> glSurfaceView.setLayoutParams(lp));
     }
 
     /**
@@ -647,9 +698,15 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
             return;
         }
 
-        // Skip if it's the Earth map
+        // Skip if it's the Earth map or No Map option
         if ("earth".equals(mapId)) {
             Timber.d("Earth map selected, skipping anchor resolution");
+            return;
+        }
+
+        // Skip if it's the No Map option
+        if ("no_map".equals(mapId)) {
+            Timber.d("No Map option selected, using direct ARCore pose without anchor resolution");
             return;
         }
 
@@ -666,7 +723,7 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
                         }
                     }
                 })
-                .addOnFailureListener(e -> 
+                .addOnFailureListener(e ->
                     Timber.e(e, "Error loading map")
                 );
     }
@@ -685,6 +742,13 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         resolvedAnchorsCount = 0;
         totalAnchorsToResolve = currentMap.getAnchors().size();
 
+        // Notify listener about initial state
+        if (anchorResolutionListener != null) {
+            runOnMainThread(() ->
+                anchorResolutionListener.onAnchorResolutionUpdate(
+                    resolvedAnchorsCount, totalAnchorsToResolve));
+        }
+
         // Set session in manager
         mapResolvingManager.setSession(session);
 
@@ -695,6 +759,13 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
                         resolvedAnchorsCount++;
                         // Debug message
                         Timber.d("Resolved anchor %d/%d", resolvedAnchorsCount, totalAnchorsToResolve);
+
+                        // Notify listener if available
+                        if (anchorResolutionListener != null) {
+                            runOnMainThread(() ->
+                                anchorResolutionListener.onAnchorResolutionUpdate(
+                                    resolvedAnchorsCount, totalAnchorsToResolve));
+                        }
                     } else if (cloudAnchorState.isError()) {
                         Timber.e("Error resolving anchor %s: %s", cloudAnchorId, cloudAnchorState);
                     }
@@ -709,24 +780,180 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
     }
 
     /**
-     * Helper method to render a visual marker at an anchor's position.
+     * Clean up resources when the handler is no longer needed.
      */
-    private void renderAnchorMarker(Pose pose, float[] viewMatrix, float[] projectionMatrix) {
-        //final float[] colorCorrectionRgba = new float[4];
-        //frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
+    public void cleanup() {
+        if (renderer != null) {
+            renderer.cleanup();
+        }
+    }
 
-        float[] translation = new float[3];
-        float[] rotation = new float[4];
-        pose.getTranslation(translation, 0);
-        currentPose.getRotationQuaternion(rotation, 0);
-        Pose rotatedPose = new Pose(translation, rotation);
-        rotatedPose.toMatrix(anchorMatrix, 0);
-        
-        
-        //pose.toMatrix(anchorMatrix, 0);
-        float scaleFactor = 1.0f;
-        twoDRenderer.updateModelMatrix(anchorMatrix, scaleFactor);
-        twoDRenderer.draw(viewMatrix, projectionMatrix);
+
+
+    /**
+     * Computes the origin pose from the closest resolved anchor.
+     * This is used when the true origin anchor has not been resolved yet.
+     *
+     * @return The computed origin pose, or null if it couldn't be computed
+     */
+    public Pose computeOriginPose() {
+        if (currentMap == null || currentMap.getAnchors() == null || mapResolvingManager == null) {
+            return null;
+        }
+
+        List<MapResolvingManager.ResolvedAnchor> resolvedAnchors = mapResolvingManager.getResolvedAnchors();
+        if (resolvedAnchors.isEmpty()) {
+            return null;
+        }
+
+        // First, try to find the origin anchor (the one with local coordinates 0,0,0)
+        String originAnchorId = null;
+        for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+            if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                originAnchorId = mapAnchor.getCloudAnchorId();
+                Timber.d("Found origin anchor with ID: %s", originAnchorId);
+                break;
+            }
+        }
+
+        // If we found the origin anchor ID, get its resolved anchor and pose
+        if (originAnchorId != null) {
+            MapResolvingManager.ResolvedAnchor resolvedOriginAnchor =
+                    mapResolvingManager.getResolvedAnchor(originAnchorId);
+
+            if (resolvedOriginAnchor != null) {
+                Pose originPose = resolvedOriginAnchor.getAnchor().getPose();
+                Timber.d("Using origin anchor (ID: %s) for local coordinate system with pose: %s",
+                        originAnchorId, originPose);
+                return originPose;
+            } else {
+                Timber.w("Origin anchor (ID: %s) was not successfully resolved", originAnchorId);
+            }
+        }
+
+        // If we couldn't find the origin anchor or it wasn't resolved, find the closest anchor to the origin
+        Map.Anchor closestAnchor = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+            // Skip anchors that are at the origin (they should have been found earlier)
+            if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                continue;
+            }
+
+            // Calculate distance to origin
+            double distance = mapAnchor.distanceToOrigin();
+            if (distance < minDistance) {
+                // Find the corresponding resolved anchor
+                MapResolvingManager.ResolvedAnchor resolvedAnchor =
+                        mapResolvingManager.getResolvedAnchor(mapAnchor.getCloudAnchorId());
+
+                if (resolvedAnchor != null) {
+                    minDistance = distance;
+                    closestAnchor = mapAnchor;
+                }
+            }
+        }
+
+        // If we found a closest anchor, compute the origin pose from it
+        if (closestAnchor != null) {
+            MapResolvingManager.ResolvedAnchor resolvedClosestAnchor =
+                    mapResolvingManager.getResolvedAnchor(closestAnchor.getCloudAnchorId());
+
+            if (resolvedClosestAnchor != null) {
+                // Get the world pose of the closest anchor
+                Pose closestAnchorPose = resolvedClosestAnchor.getAnchor().getPose();
+
+                // Create a pose representing the anchor's position in local coordinates
+                float[] anchorLocalTranslation = new float[] {
+                        (float)closestAnchor.getLocalX(),
+                        (float)closestAnchor.getLocalY(),
+                        (float)closestAnchor.getLocalZ()
+                };
+
+                // Create a pose with the anchor's local orientation
+                float[] anchorLocalRotation = new float[] {
+                        (float)closestAnchor.getLocalQx(),
+                        (float)closestAnchor.getLocalQy(),
+                        (float)closestAnchor.getLocalQz(),
+                        (float)closestAnchor.getLocalQw()
+                };
+
+                // Create the anchor's pose in local coordinates
+                Pose anchorInLocalCoords = new Pose(anchorLocalTranslation, anchorLocalRotation);
+
+                // To find the origin in world coordinates, we need to apply the inverse transform:
+                // originWorld = anchorWorld * (anchorLocal)^-1
+                Pose originPose = closestAnchorPose.compose(anchorInLocalCoords.inverse());
+
+                Timber.d("Computed origin pose from closest anchor (ID: %s) with local coordinates (%f, %f, %f) and orientation (%f, %f, %f, %f)",
+                        closestAnchor.getCloudAnchorId(),
+                        closestAnchor.getLocalX(), closestAnchor.getLocalY(), closestAnchor.getLocalZ(),
+                        closestAnchor.getLocalQx(), closestAnchor.getLocalQy(), closestAnchor.getLocalQz(), closestAnchor.getLocalQw());
+
+                return originPose;
+            }
+        }
+
+        // If we couldn't compute the origin pose, fall back to the first resolved anchor
+        Pose fallbackPose = resolvedAnchors.get(0).getAnchor().getPose();
+        Timber.w("Falling back to first resolved anchor as origin with pose: %s", fallbackPose);
+        return fallbackPose;
+    }
+
+    /**
+     * Computes the local coordinates of a pose relative to the origin pose
+     *
+     * @param pose The pose to convert to local coordinates
+     * @param originPose The origin pose to use as reference
+     * @return The pose in local coordinates, or null if there's no origin pose
+     */
+    public Pose computeLocalPose(Pose pose, Pose originPose) {
+        if (originPose == null || pose == null) {
+            return null;
+        }
+
+        // Calculate the relative pose (transform from origin to pose)
+        return originPose.inverse().compose(pose);
+    }
+
+    /**
+     * Creates a JSON object with the local coordinate pose information
+     *
+     * @param localPose The local pose to convert to JSON
+     * @return A JSON object containing the local pose data
+     */
+    public JSONObject createLocalPoseJson(Pose localPose) {
+        JSONObject poseJson = new JSONObject();
+
+        try {
+            // Extract translation
+            float[] translation = new float[3];
+            localPose.getTranslation(translation, 0);
+
+            // Extract rotation as quaternion
+            float[] rotation = new float[4];
+            localPose.getRotationQuaternion(rotation, 0);
+
+            // Add to JSON
+            poseJson.put("x", translation[0]);
+            poseJson.put("y", translation[1]);
+            poseJson.put("z", translation[2]);
+            poseJson.put("qx", rotation[0]);
+            poseJson.put("qy", rotation[1]);
+            poseJson.put("qz", rotation[2]);
+            poseJson.put("qw", rotation[3]);
+
+            // Add map ID for reference
+            if (currentMap != null) {
+                poseJson.put("mapId", currentMap.getId());
+            }
+
+        } catch (JSONException e) {
+            Timber.e(e, "Error creating local pose JSON");
+        }
+
+        return poseJson;
     }
 }
 
