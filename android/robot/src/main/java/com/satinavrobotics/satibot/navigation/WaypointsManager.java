@@ -36,12 +36,42 @@ public class WaypointsManager {
         return waypointQueue.poll();
     }
 
+    public synchronized JSONObject peekNextWaypoint() {
+        return waypointQueue.peek();
+    }
+
     public synchronized boolean hasNextWaypoint() {
         return !waypointQueue.isEmpty();
     }
 
+    public synchronized int getWaypointCount() {
+        return waypointQueue.size();
+    }
+
     public synchronized JSONObject getNextWaypointInLocalCoordinates() {
         JSONObject globalWaypoint = getNextWaypoint();
+        if (globalWaypoint == null) return null;
+
+        JSONObject currentLocation = StatusManager.getInstance().getStatus().optJSONObject("location");
+        if (currentLocation == null) return globalWaypoint;
+
+        try {
+            double lat1 = currentLocation.getDouble("latitude");
+            double lon1 = currentLocation.getDouble("longitude");
+            double lat2 = globalWaypoint.getDouble("lat");
+            double lon2 = globalWaypoint.getDouble("lng");
+            double bearing = currentLocation.getDouble("bearing"); // Current heading in degrees
+
+            JSONObject localCoords = convertToLocalCoordinates(lat1, lon1, lat2, lon2, bearing);
+            return localCoords;
+        } catch (JSONException e) {
+            e.printStackTrace();
+            return globalWaypoint;
+        }
+    }
+
+    public synchronized JSONObject peekNextWaypointInLocalCoordinates() {
+        JSONObject globalWaypoint = peekNextWaypoint();
         if (globalWaypoint == null) return null;
 
         JSONObject currentLocation = StatusManager.getInstance().getStatus().optJSONObject("location");

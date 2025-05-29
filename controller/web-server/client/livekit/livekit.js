@@ -31,7 +31,7 @@ export function LiveKitClient() {
         .then(response => {
           url = response.data.server_url;
           token = response.data.token;
-          ttl = response.data.ttl; // Assume the server returns an expiration date
+          const ttl = response.data.ttl; // Assume the server returns an expiration date
           expiration = Math.floor(Date.now() / 1000) + ttl - 60;
 
           // Store the URL, token, and expiration in localStorage
