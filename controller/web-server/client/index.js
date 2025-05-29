@@ -1,7 +1,6 @@
 import {Keyboard} from './keyboardHandlers/keyboard.js'
 import {Commands} from './keyboardHandlers/commands'
 import {RemoteKeyboard} from './keyboardHandlers/remote_keyboard'
-import {signInWithCustomToken} from 'firebase/auth'
 import {auth, googleSigIn, googleSignOut} from './firebase/authentication'
 import {localStorageKeys} from './utils/constants'
 import {Gamepad } from './keyboardHandlers/gamepad.js'
@@ -19,7 +18,7 @@ const recorder = new Recorder();
     // connect to room
     await connection.start()
     const command = new Commands(
-        (cmd)=>connection.sendCommand(cmd), 
+        (cmd)=>connection.sendCommand(cmd),
         (cmd)=>connection.sendDriveCommand(cmd)
     )
     const remoteKeyboard = new RemoteKeyboard(command.getCommandHandler())
@@ -197,6 +196,7 @@ function handleSubscription() {
  * @returns {string}
  */
 export function getCookie(cname) {
+    // Import the cookie utility from authentication.js
     const name = cname + '='
     const decodedCookie = decodeURIComponent(document.cookie)
     const ca = decodedCookie.split(';')
@@ -232,7 +232,9 @@ function handleSingleSignOn() {
     if (cookie) {
         const result = cookie
         localStorage.setItem(localStorageKeys.isSignIn, 'true')
-        signInWithCustomToken(auth, result).then((res) => {
+
+        // Use the auth object from authentication.js which is now using our GoogleAuth module
+        auth.signInWithCustomToken(result).then((res) => {
             // Use the user data or store it in a variable for later use
             signedInUser = res.user
             const signInBtn = document.getElementsByClassName('google-sign-in-button')[0]
@@ -255,15 +257,7 @@ function handleServerDetailsOnSSO() {
     }
 }
 
-/**
- * function to handle access token
- */
-function handleAccessToken() {
-    const tokenCookie = getCookie('accessToken')
-    if (tokenCookie) {
-        deleteCookie('accessToken')
-    }
-}
+
 
 /**
  * function to handle auth status on refreshing page

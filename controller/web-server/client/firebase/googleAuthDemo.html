@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Auth Module Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #4285F4;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #3367D6;
+        }
+        .user-info {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+            display: none;
+        }
+        .user-info img {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin-right: 15px;
+            vertical-align: middle;
+        }
+        .code-block {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-family: monospace;
+            margin: 15px 0;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Google Auth Module Demo</h1>
+    
+    <div class="container">
+        <h2>Authentication</h2>
+        <button id="sign-in-button">Sign in with Google</button>
+        <button id="sign-out-button" class="hidden">Sign out</button>
+        
+        <div id="user-info" class="user-info">
+            <img id="user-photo" src="" alt="User photo">
+            <span id="user-name"></span>
+            <p>Email: <span id="user-email"></span></p>
+            <p>User ID: <span id="user-id"></span></p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>How to Use This Module</h2>
+        <p>This demo shows how to use the GoogleAuth module in your project. Here's how to get started:</p>
+        
+        <h3>1. Include the necessary scripts</h3>
+        <div class="code-block">
+            &lt;!-- Firebase SDK --&gt;
+            &lt;script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"&gt;&lt;/script&gt;
+            &lt;script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"&gt;&lt;/script&gt;
+            
+            &lt;!-- Google API (optional, for advanced features) --&gt;
+            &lt;script src="https://apis.google.com/js/platform.js"&gt;&lt;/script&gt;
+            
+            &lt;!-- Your module --&gt;
+            &lt;script type="module" src="./app.js"&gt;&lt;/script&gt;
+        </div>
+        
+        <h3>2. Create a configuration file (app.js)</h3>
+        <div class="code-block">
+            import { GoogleAuth } from './googleAuth.js';
+            
+            // Firebase configuration
+            const firebaseConfig = {
+              apiKey: "YOUR_API_KEY",
+              authDomain: "YOUR_AUTH_DOMAIN",
+              projectId: "YOUR_PROJECT_ID",
+              storageBucket: "YOUR_STORAGE_BUCKET",
+              messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+              appId: "YOUR_APP_ID"
+            };
+            
+            // Create a new GoogleAuth instance
+            const googleAuth = new GoogleAuth(firebaseConfig);
+            
+            // Set up event listeners
+            document.addEventListener('DOMContentLoaded', () => {
+              const signInButton = document.getElementById('sign-in-button');
+              const signOutButton = document.getElementById('sign-out-button');
+              
+              signInButton.addEventListener('click', handleSignIn);
+              signOutButton.addEventListener('click', handleSignOut);
+              
+              // Check if user is already signed in
+              if (googleAuth.isSignedIn()) {
+                updateUI(googleAuth.getUser());
+              }
+              
+              // Listen for auth state changes
+              googleAuth.onAuthStateChanged((user) => {
+                if (user) {
+                  updateUI(user);
+                } else {
+                  resetUI();
+                }
+              });
+            });
+            
+            function handleSignIn() {
+              googleAuth.signIn()
+                .then((user) => {
+                  console.log('Signed in:', user);
+                })
+                .catch((error) => {
+                  console.error('Error signing in:', error);
+                });
+            }
+            
+            function handleSignOut() {
+              googleAuth.signOut()
+                .then(() => {
+                  console.log('Signed out');
+                })
+                .catch((error) => {
+                  console.error('Error signing out:', error);
+                });
+            }
+            
+            function updateUI(user) {
+              document.getElementById('sign-in-button').classList.add('hidden');
+              document.getElementById('sign-out-button').classList.remove('hidden');
+              document.getElementById('user-info').style.display = 'block';
+              document.getElementById('user-photo').src = user.photoURL || '';
+              document.getElementById('user-name').textContent = user.displayName || '';
+              document.getElementById('user-email').textContent = user.email || '';
+              document.getElementById('user-id').textContent = user.uid || '';
+            }
+            
+            function resetUI() {
+              document.getElementById('sign-in-button').classList.remove('hidden');
+              document.getElementById('sign-out-button').classList.add('hidden');
+              document.getElementById('user-info').style.display = 'none';
+            }
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>Features</h2>
+        <ul>
+            <li>Easy integration with Firebase Authentication</li>
+            <li>Google Sign-In with popup</li>
+            <li>Custom token authentication</li>
+            <li>Auth state management</li>
+            <li>Access token handling</li>
+            <li>Configurable storage options</li>
+            <li>Cookie utilities</li>
+        </ul>
+        <p>For more details, see the <a href="GOOGLE_AUTH_MODULE.md">documentation</a>.</p>
+    </div>
+    
+    <!-- This is just a demo page. In a real implementation, you would include the actual Firebase SDK and your module. -->
+    <script>
+        // Demo functionality (simulates the module behavior)
+        document.addEventListener('DOMContentLoaded', () => {
+            const signInButton = document.getElementById('sign-in-button');
+            const signOutButton = document.getElementById('sign-out-button');
+            
+            signInButton.addEventListener('click', () => {
+                alert('In a real implementation, this would open the Google sign-in popup.');
+                // Demo: Show a mock user
+                const mockUser = {
+                    displayName: 'Demo User',
+                    email: 'demo.user@example.com',
+                    photoURL: 'https://via.placeholder.com/50',
+                    uid: 'demo-user-123'
+                };
+                updateUI(mockUser);
+            });
+            
+            signOutButton.addEventListener('click', () => {
+                alert('In a real implementation, this would sign the user out.');
+                resetUI();
+            });
+            
+            function updateUI(user) {
+                signInButton.classList.add('hidden');
+                signOutButton.classList.remove('hidden');
+                const userInfo = document.getElementById('user-info');
+                userInfo.style.display = 'block';
+                document.getElementById('user-photo').src = user.photoURL;
+                document.getElementById('user-name').textContent = user.displayName;
+                document.getElementById('user-email').textContent = user.email;
+                document.getElementById('user-id').textContent = user.uid;
+            }
+            
+            function resetUI() {
+                signInButton.classList.remove('hidden');
+                signOutButton.classList.add('hidden');
+                document.getElementById('user-info').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

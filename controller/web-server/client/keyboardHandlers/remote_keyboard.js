@@ -13,7 +13,7 @@ export function RemoteKeyboard (commandHandler) {
   let pollInterval = null
   
   // Poll interval in milliseconds
-  const POLL_RATE = 200
+  const POLL_RATE = 25
   
   // Velocity scaling constants
   const BASE_VELOCITY = 8.0
@@ -30,8 +30,8 @@ export function RemoteKeyboard (commandHandler) {
     if (pressedKeys.has('s')) linear = -BASE_VELOCITY * VELOCITY_SCALE
     
     // Left/Right with scaled velocity
-    if (pressedKeys.has('a')) angular = BASE_VELOCITY * VELOCITY_SCALE
-    if (pressedKeys.has('d')) angular = -BASE_VELOCITY * VELOCITY_SCALE
+    if (pressedKeys.has('a')) angular = -5*BASE_VELOCITY * VELOCITY_SCALE
+    if (pressedKeys.has('d')) angular = 5*BASE_VELOCITY * VELOCITY_SCALE
     
     // If any movement keys are pressed, send command
     if (pressedKeys.has('w') || pressedKeys.has('s') || 
@@ -130,12 +130,14 @@ export function RemoteKeyboard (commandHandler) {
   
     // Determine steering: invert when moving backwards for intuitive control
     const steeringDirection = netThrust >= 0 ? 1 : -1;
-    const steeringFactor = Math.abs(netThrust) > 0.1 ? 0.5 : 1.0;
-    const rawSteering = leftJoystickX * steeringFactor * steeringDirection;
+    const steeringFactor = Math.abs(netThrust) > 0.1 ? 0.75 : 0.5;
+    const velocity = 50.0;
+    const rawSteering = leftJoystickX * steeringFactor * steeringDirection * velocity;
   
+
     // Compute linear and angular velocities
     const linearVelocity = clamp(netThrust);
-    const angularVelocity = clamp(rawSteering);
+    const angularVelocity = clamp(rawSteering, -velocity, velocity);
   
     // Only send commands if there's significant input
     if (

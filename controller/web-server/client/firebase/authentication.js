@@ -1,8 +1,7 @@
-import {initializeApp} from 'firebase/app'
-import {getAuth, signOut, signInWithPopup, GoogleAuthProvider} from 'firebase/auth'
 import {getFirestore} from '@firebase/firestore'
 import {getStorage} from 'firebase/storage'
 import {localStorageKeys} from '../utils/constants'
+import {GoogleAuth} from './googleAuth'
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -18,35 +17,27 @@ const firebaseConfig = {
 const googleApiClientID = "154487542187-eca7ghfm2vepoaglvjurdalu3c6tntjr.apps.googleusercontent.com"
 console.log(googleApiClientID)
 
-const app = initializeApp(firebaseConfig)
-export const auth = getAuth(app)
-const provider = new GoogleAuthProvider()
-export const FirebaseStorage = getStorage()
-export const db = getFirestore(app)
+// Initialize the GoogleAuth module with Firebase config and options
+const googleAuthOptions = {
+    googleApiClientID: googleApiClientID,
+    scopes: ['https://www.googleapis.com/auth/drive.metadata.readonly'],
+    storageKeys: localStorageKeys
+};
+
+// Create a new GoogleAuth instance
+const googleAuthInstance = new GoogleAuth(firebaseConfig, googleAuthOptions);
+
+// Export the auth object for compatibility with existing code
+export const auth = googleAuthInstance.auth;
+export const FirebaseStorage = getStorage(googleAuthInstance.app);
+export const db = getFirestore(googleAuthInstance.app);
 
 /**
  * Function to initialize Google API
  * @returns {Promise<void>}
  */
 export async function initializeGoogleAPI() {
-    return new Promise((resolve, reject) => {
-        gapi.load('auth2', () => {
-            try {
-                // Initialize auth2 with your client ID
-                gapi.auth2.init({
-                    client_id: googleApiClientID,
-                }).then(() => {
-                    console.log('Google Auth initialized');
-                    resolve();  // Resolve after successful initialization
-                }).catch((error) => {
-                    console.error('Error initializing Google Auth', error);
-                    reject(error);  // Reject if there's an error
-                });
-            } catch (err) {
-                reject(err);  // Handle unexpected errors
-            }
-        });
-    });
+    return googleAuthInstance.initializeGoogleAPI();
 }
 
 /**
@@ -54,33 +45,13 @@ export async function initializeGoogleAPI() {
  * @returns {Promise<unknown>}
  */
 export function googleSigIn() {
-    return new Promise((resolve, reject) => {
-        provider.addScope('https://www.googleapis.com/auth/drive.metadata.readonly'); // Request Drive API access
-        signInWithPopup(auth, provider)
-            .then((result) => {
-                const credential = GoogleAuthProvider.credentialFromResult(result);
-                const accessToken = credential.accessToken; // Get access token
-                console.log(accessToken)
-                if (accessToken) {
-                    localStorage.setItem('driveAccessToken', accessToken); // Store access token
-                }
-
-                resolve(result.user);
-            })
-            .catch((error) => {
-                reject(error);
-            });
-    });
+    return googleAuthInstance.signIn();
 }
 
 /**
  * function to log out user from Google account
  * @returns {Promise<void>}
  */
-export function googleSignOut () {
-    signOut(auth).then(() => {
-        localStorage.setItem(localStorageKeys.isSignIn, 'false')
-    }).catch((error) => {
-        console.log('Sign-out error ', error)
-    })
+export function googleSignOut() {
+    return googleAuthInstance.signOut();
 }
