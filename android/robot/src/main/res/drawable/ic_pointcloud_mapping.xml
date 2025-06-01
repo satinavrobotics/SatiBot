@@ -1,0 +1,108 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    
+    <!-- 3D Point cloud representation -->
+    <!-- Front layer points (larger, brighter) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M6,6m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0"
+        android:fillAlpha="1.0"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M10,5m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0"
+        android:fillAlpha="1.0"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15,7m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0"
+        android:fillAlpha="1.0"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M18,9m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0"
+        android:fillAlpha="1.0"/>
+    
+    <!-- Middle layer points -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M4,10m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0"
+        android:fillAlpha="0.7"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M8,9m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0"
+        android:fillAlpha="0.7"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,8m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0"
+        android:fillAlpha="0.7"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16,11m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0"
+        android:fillAlpha="0.7"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M20,12m-0.8,0a0.8,0.8 0,1 1,1.6 0a0.8,0.8 0,1 1,-1.6 0"
+        android:fillAlpha="0.7"/>
+    
+    <!-- Back layer points (smaller, dimmer) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M5,14m-0.6,0a0.6,0.6 0,1 1,1.2 0a0.6,0.6 0,1 1,-1.2 0"
+        android:fillAlpha="0.4"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9,13m-0.6,0a0.6,0.6 0,1 1,1.2 0a0.6,0.6 0,1 1,-1.2 0"
+        android:fillAlpha="0.4"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M13,12m-0.6,0a0.6,0.6 0,1 1,1.2 0a0.6,0.6 0,1 1,-1.2 0"
+        android:fillAlpha="0.4"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M17,15m-0.6,0a0.6,0.6 0,1 1,1.2 0a0.6,0.6 0,1 1,-1.2 0"
+        android:fillAlpha="0.4"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M11,16m-0.6,0a0.6,0.6 0,1 1,1.2 0a0.6,0.6 0,1 1,-1.2 0"
+        android:fillAlpha="0.4"/>
+    
+    <!-- Farthest layer points (smallest, dimmest) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M7,18m-0.4,0a0.4,0.4 0,1 1,0.8 0a0.4,0.4 0,1 1,-0.8 0"
+        android:fillAlpha="0.2"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M14,17m-0.4,0a0.4,0.4 0,1 1,0.8 0a0.4,0.4 0,1 1,-0.8 0"
+        android:fillAlpha="0.2"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M18,19m-0.4,0a0.4,0.4 0,1 1,0.8 0a0.4,0.4 0,1 1,-0.8 0"
+        android:fillAlpha="0.2"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M10,20m-0.4,0a0.4,0.4 0,1 1,0.8 0a0.4,0.4 0,1 1,-0.8 0"
+        android:fillAlpha="0.2"/>
+    
+    <!-- Connection lines to show 3D structure -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M6,6L8,9"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.5"
+        android:strokeAlpha="0.3"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M10,5L12,8"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.5"
+        android:strokeAlpha="0.3"/>
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15,7L16,11"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.5"
+        android:strokeAlpha="0.3"/>
+</vector>

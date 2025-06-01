@@ -29,7 +29,7 @@ import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
-import org.openbot.databinding.FragmentPointcloudMappingBinding;
+import com.satinavrobotics.satibot.databinding.FragmentPointcloudMappingBinding;
 
 import com.satinavrobotics.satibot.env.CameraPermissionHelper;
 import com.satinavrobotics.satibot.env.DisplayRotationHelper;

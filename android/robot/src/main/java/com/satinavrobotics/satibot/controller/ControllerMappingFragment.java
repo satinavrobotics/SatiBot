@@ -17,7 +17,6 @@ import com.google.android.material.internal.ViewUtils;
 import com.satinavrobotics.satibot.R;
 import com.satinavrobotics.satibot.databinding.FragmentControllerMappingBinding;
 
-import com.satinavrobotics.satibot.env.GameController;
 import com.satinavrobotics.satibot.utils.Constants;
 
 public class ControllerMappingFragment extends Fragment {

@@ -1,59 +1,83 @@
 package com.satinavrobotics.satibot.robot;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
+import android.os.VibratorManager;
+import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.Navigation;
 
-import org.openbot.R;
-import org.openbot.databinding.FragmentBluetoothControlBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentBluetoothControlBinding;
 
-import com.satinavrobotics.satibot.common.ControlsFragment;
 import com.satinavrobotics.satibot.utils.Constants;
 import com.satinavrobotics.satibot.utils.SensorReader;
-import com.satinavrobotics.satibot.utils.SteeringWheelView;
-import com.satinavrobotics.satibot.utils.TiltSteeringHandler;
-import com.satinavrobotics.satibot.utils.TouchPedalView;
-
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 
 import java.util.Locale;
 
 public class BluetoothControlFragment extends ControlsFragment {
     private FragmentBluetoothControlBinding binding;
 
-    // Drive mode constants
-    private static final int DRIVE_MODE_DUAL_PEDALS = 0;
-    private static final int DRIVE_MODE_TILT = 1;
-    private static final int DRIVE_MODE_WHEEL = 2;
-
     // Control update interval in milliseconds
     private static final int CONTROL_UPDATE_INTERVAL = 50;
 
-    private int currentDriveMode = DRIVE_MODE_DUAL_PEDALS;
     private Handler controlUpdateHandler;
     private Runnable controlUpdateRunnable;
     private boolean isControlUpdateRunning = false;
-    private TiltSteeringHandler tiltSteeringHandler;
 
     // Control values
     private float currentSteeringValue = 0.0f;
-    private float currentForwardValue = 0.0f;
-    private float currentBackwardValue = 0.0f;
     private float currentVelocityValue = 0.0f;
     private float normalizedLinearVelocity = 0.0f;
     private float targetAngularVelocity = 0.0f;
-    private float leftPwm = 0.0f;
-    private float rightPwm = 0.0f;
+
+    // Touch tracking variables
+    private float initialTouchX = 0.0f;
+    private float initialTouchY = 0.0f;
+    private boolean isLeftJoystickActive = false;
+    private boolean isRightJoystickActive = false;
+
+    // Haptic feedback
+    private Vibrator vibrator;
+    private static final float HAPTIC_THRESHOLD = 0.4f; // Lower threshold for haptic feedback (0.0 to 1.0)
+    private static final float HAPTIC_MAX_THRESHOLD = 0.9f; // Upper threshold for maximum haptic feedback
+    private static final long HAPTIC_DURATION = 500; // Duration of continuous vibration in milliseconds
+    private static final long HAPTIC_COOLDOWN = 150; // Shorter cooldown for more continuous feel
+    private static final long HAPTIC_COOLDOWN_STEERING = 600; // Longer cooldown for steering to reduce vibration frequency
+    private static final int HAPTIC_MIN_AMPLITUDE = 30; // Minimum amplitude for haptic feedback
+    private static final int HAPTIC_MAX_AMPLITUDE = 100; // Maximum amplitude for haptic feedback
+    private static final int HAPTIC_MAX_AMPLITUDE_STEERING = 50; // Reduced maximum amplitude for steering feedback
+    private static final String PREF_HAPTIC_ENABLED = "haptic_feedback_enabled"; // SharedPreferences key
+    private boolean hapticFeedbackEnabled = true; // Default to enabled
+    private long lastLeftHapticTime = 0;
+    private long lastRightHapticTime = 0;
+    private boolean isLeftVibrating = false;
+    private boolean isRightVibrating = false;
+    private float lastLeftIntensity = 0.0f;
+    private float lastRightIntensity = 0.0f;
+
+    // --- Stop/Unlock button logic fields ---
+    private Handler stopHandler = new Handler(Looper.getMainLooper());
+    private Runnable stopReleaseRunnable;
+    private boolean isLongPress = false;
+    private static final long LONG_PRESS_THRESHOLD = 800; // ms
+    private static final long STOP_RELEASE_DELAY = 5000; // ms
 
 
     @Override
@@ -74,20 +98,61 @@ public class BluetoothControlFragment extends ControlsFragment {
         SensorReader sensorReader = SensorReader.getInstance();
         sensorReader.init(requireContext());
 
-        // Initialize tilt steering handler
-        tiltSteeringHandler = new TiltSteeringHandler(requireContext());
-        tiltSteeringHandler.setSteeringListener(steeringValue -> {
-            currentSteeringValue = steeringValue;
-            updateTiltControls();
-        });
+        // Initialize vibrator service
+        initializeVibrator();
+
+        // Load haptic feedback setting
+        loadHapticSetting();
 
         initializeControls();
         setupConnectionToggles();
-        setupDriveModeSpinner();
-        setupPedalControls();
-        setupTiltAccelerationPedals();
         setupWheelControls();
-        setupStopButton();
+        setupHapticToggle();
+
+        // Make wheel controls visible
+        binding.wheelControlsLayout.setVisibility(View.VISIBLE);
+
+        // Initialize joystick positions after layout is ready
+        view.post(() -> {
+            if (binding != null) {
+                // Initialize joystick positions
+                binding.forwardSeekBar.setProgress(50);
+                binding.rightSeekBar.setProgress(50);
+            }
+        });
+
+        // Add a global layout listener to position thumbs after layout is complete
+        binding.leftJoystickContainer.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                if (binding != null) {
+                    // Position both joystick thumbs at their center positions
+                    updateAccelerationJoystickPosition(50);
+                    updateSteeringJoystickPosition(50);
+
+                    // Ensure the thumbs are properly centered
+                    binding.accelerationJoystickThumb.post(() -> {
+                        if (binding != null) {
+                            // Re-center after the layout is fully measured
+                            updateAccelerationJoystickPosition(50);
+                        }
+                    });
+
+                    binding.steeringJoystickThumb.post(() -> {
+                        if (binding != null) {
+                            // Re-center after the layout is fully measured
+                            updateSteeringJoystickPosition(50);
+                        }
+                    });
+
+                    // Remove the listener to prevent multiple calls
+                    binding.leftJoystickContainer.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                }
+            }
+        });
+
+        // Start control updates for wheel mode
+        startControlUpdates();
 
         // Then initialize heading info display
         updateHeadingInfo();
@@ -110,199 +175,49 @@ public class BluetoothControlFragment extends ControlsFragment {
             });
     }
 
-    private void setupDriveModeSpinner() {
-        // Set up the spinner with drive mode options
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(
-                requireContext(),
-                R.array.bluetooth_drive_modes,
-                android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        binding.driveModeSpinner.setAdapter(adapter);
+    /**
+     * Sets up the haptic feedback toggle button
+     */
+    private void setupHapticToggle() {
+        // Set initial state based on saved preference
+        binding.hapticToggle.setChecked(hapticFeedbackEnabled);
 
-        // Set the selection listener
-        binding.driveModeSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                switchDriveMode(position);
-            }
+        // Set up haptic toggle listener
+        binding.hapticToggle.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            hapticFeedbackEnabled = isChecked;
+            saveHapticSetting();
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-                // Do nothing
-            }
-        });
-    }
-
-    private void switchDriveMode(int mode) {
-        // Stop any active control modes
-        if (currentDriveMode == DRIVE_MODE_TILT) {
-            stopTiltControl();
-        }
-
-        // Stop continuous control updates if running
-        stopControlUpdates();
-
-        // Update the current drive mode
-        currentDriveMode = mode;
-
-        // Update UI based on the selected mode
-        switch (mode) {
-            case DRIVE_MODE_DUAL_PEDALS:
-                binding.sliderControlsLayout.setVisibility(View.VISIBLE);
-                binding.tiltControlsLayout.setVisibility(View.GONE);
-                binding.wheelControlsLayout.setVisibility(View.GONE);
-                break;
-
-            case DRIVE_MODE_TILT:
-                binding.sliderControlsLayout.setVisibility(View.GONE);
-                binding.tiltControlsLayout.setVisibility(View.VISIBLE);
-                binding.wheelControlsLayout.setVisibility(View.GONE);
-                startTiltControl();
-                break;
-
-            case DRIVE_MODE_WHEEL:
-                binding.sliderControlsLayout.setVisibility(View.GONE);
-                binding.tiltControlsLayout.setVisibility(View.GONE);
-                binding.wheelControlsLayout.setVisibility(View.VISIBLE);
-                startControlUpdates();
-                break;
-        }
-
-        // Reset control values
-        vehicle.setControlVelocity(0, 0);
-        handleDriveCommand();
-    }
-
-
-    private void setupPedalControls() {
-        // Set up left pedal
-        binding.leftPedal.setOnValueChangeListener(new TouchPedalView.OnValueChangeListener() {
-            @Override
-            public void onValueChanged(float value) {
-                updateControlFromPedals();
-            }
-
-            @Override
-            public void onTouchEnd() {
-                // Auto-center when touch is released
-                updateControlFromPedals();
-            }
-        });
-
-        // Set up right pedal
-        binding.rightPedal.setOnValueChangeListener(new TouchPedalView.OnValueChangeListener() {
-            @Override
-            public void onValueChanged(float value) {
-                updateControlFromPedals();
-            }
-
-            @Override
-            public void onTouchEnd() {
-                // Auto-center when touch is released
-                updateControlFromPedals();
+            // Provide feedback when enabling
+            if (isChecked) {
+                // Give a short vibration to confirm haptics are on
+                if (vibrator != null && vibrator.hasVibrator()) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        VibrationEffect effect = VibrationEffect.createOneShot(100, 50);
+                        vibrator.vibrate(effect);
+                    } else {
+                        vibrator.vibrate(100);
+                    }
+                }
             }
         });
     }
 
-    private void setupStopButton() {
-        binding.stopButton.setOnClickListener(v -> {
-            // Stop the vehicle using linear and angular velocity
-            vehicle.setControlVelocity(0, 0);
-            handleDriveCommand();
-
-        });
+    /**
+     * Loads the haptic feedback setting from SharedPreferences
+     */
+    private void loadHapticSetting() {
+        SharedPreferences prefs = requireActivity().getSharedPreferences("robot_settings", Context.MODE_PRIVATE);
+        hapticFeedbackEnabled = prefs.getBoolean(PREF_HAPTIC_ENABLED, true); // Default to enabled
     }
 
-    private void updateControlFromPedals() {
-        // Get values from pedals (-1 to 1)
-        float leftValue = binding.leftPedal.getCurrentValue();
-        float rightValue = binding.rightPedal.getCurrentValue();
-
-        // Convert from left/right wheel speeds to linear/angular velocity
-        float linear = (leftValue + rightValue) / 2;
-        float angular = (rightValue - leftValue) / 0.15f; // Using same wheelbase as in VelocityConverter
-
-        // Set the control values using linear and angular velocity
-        vehicle.setControlVelocity(linear, angular);
-        handleDriveCommand();
+    /**
+     * Saves the haptic feedback setting to SharedPreferences
+     */
+    private void saveHapticSetting() {
+        SharedPreferences prefs = requireActivity().getSharedPreferences("robot_settings", Context.MODE_PRIVATE);
+        prefs.edit().putBoolean(PREF_HAPTIC_ENABLED, hapticFeedbackEnabled).apply();
     }
 
-    private void setupTiltAccelerationPedals() {
-        // Set up forward pedal (right side)
-        binding.forwardPedal.setOnValueChangeListener(new TouchPedalView.OnValueChangeListener() {
-            @Override
-            public void onValueChanged(float value) {
-                // Only use positive values for forward pedal
-                currentForwardValue = Math.max(0, value);
-                updateTiltControls();
-            }
-
-            @Override
-            public void onTouchEnd() {
-                currentForwardValue = 0;
-                updateTiltControls();
-            }
-        });
-
-        // Set up backward pedal (left side)
-        binding.backwardPedal.setOnValueChangeListener(new TouchPedalView.OnValueChangeListener() {
-            @Override
-            public void onValueChanged(float value) {
-                // Only use positive values for backward pedal, but will be applied as negative
-                currentBackwardValue = Math.max(0, value);
-                updateTiltControls();
-            }
-
-            @Override
-            public void onTouchEnd() {
-                currentBackwardValue = 0;
-                updateTiltControls();
-            }
-        });
-    }
-
-    private void updateTiltControls() {
-        if (currentDriveMode != DRIVE_MODE_TILT) return;
-
-        // Calculate speed based on pedal inputs
-        // Forward has priority over backward if both are pressed
-        float speed;
-        if (currentForwardValue > 0) {
-            speed = currentForwardValue;
-        } else if (currentBackwardValue > 0) {
-            speed = -currentBackwardValue; // Negative for reverse
-        } else {
-            speed = 0;
-        }
-
-        // Convert steering and speed directly to linear and angular velocity
-        float linear = speed;
-        float angular = currentSteeringValue * 2.0f; // Scale steering to get reasonable angular velocity
-
-        // Update vehicle control with linear and angular velocity
-        vehicle.setControlVelocity(linear, angular);
-        handleDriveCommand();
-
-    }
-
-    private void startTiltControl() {
-        // Start the tilt steering handler
-        tiltSteeringHandler.start();
-    }
-
-    private void stopTiltControl() {
-        // Stop the tilt steering handler
-        tiltSteeringHandler.stop();
-
-        // Reset control values
-        currentSteeringValue = 0;
-        currentForwardValue = 0;
-        currentBackwardValue = 0;
-
-        // Stop the vehicle using linear and angular velocity
-        vehicle.setControlVelocity(0, 0);
-        handleDriveCommand();
-    }
 
     private void initializeControls() {
         // Initialize control buttons here
@@ -349,7 +264,7 @@ public class BluetoothControlFragment extends ControlsFragment {
                     }
                     break;
 
-                case 'v': // Normalized linear velocity
+                case 'n': // Normalized linear velocity
                     if (isNumeric(body)) {
                         normalizedLinearVelocity = Float.parseFloat(body);
                         updateNormalizedLinearVelocityInfo();
@@ -363,13 +278,7 @@ public class BluetoothControlFragment extends ControlsFragment {
                     }
                     break;
 
-                case 'p': // PWM values
-                    String[] pwmValues = body.split(",");
-                    if (pwmValues.length == 2 && isNumeric(pwmValues[0]) && isNumeric(pwmValues[1])) {
-                        leftPwm = Float.parseFloat(pwmValues[0]);
-                        rightPwm = Float.parseFloat(pwmValues[1]);
-                        updatePwmValues();
-                    }
+                case 'p': // PWM values no longer displayed
                     break;
             }
         }
@@ -433,28 +342,6 @@ public class BluetoothControlFragment extends ControlsFragment {
     }
 
     /**
-     * Updates the PWM values display
-     */
-    private void updatePwmValues() {
-        // Check if binding is null
-        if (binding == null) {
-            return;
-        }
-
-        // Update PWM values in all control layouts
-        binding.pwmValueSlider.setText(
-            String.format(Locale.US, "PWM: %.0f,%.0f", leftPwm, rightPwm));
-
-        binding.pwmValueTilt.setText(
-            String.format(Locale.US, "PWM: %.0f,%.0f", leftPwm, rightPwm));
-
-        binding.pwmValueWheel.setText(
-            String.format(Locale.US, "PWM: %.0f,%.0f", leftPwm, rightPwm));
-    }
-
-
-
-    /**
      * Checks if a string is a valid numeric value
      */
     private boolean isNumeric(String str) {
@@ -495,53 +382,498 @@ public class BluetoothControlFragment extends ControlsFragment {
 
 
     private void setupWheelControls() {
-        // Set up steering wheel
-        binding.steeringWheel.setOnSteeringValueChangeListener(new SteeringWheelView.OnSteeringValueChangeListener() {
-            @Override
-            public void onSteeringValueChanged(float value) {
-                currentSteeringValue = value;
-                // Note: We don't call updateWheelControls() here as it will be called by the timer
-            }
+        // Set up acceleration joystick (left side) with touch listener
+        binding.leftJoystickContainer.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    // Record the initial touch position as the reference point
+                    initialTouchY = event.getY();
+                    isLeftJoystickActive = true;
+                    return true;
 
-            @Override
-            public void onTouchEnd() {
-                // Auto-center when touch is released
-                currentSteeringValue = 0;
-                // Immediately update controls when touch ends for responsive feel
-                updateWheelControls();
+                case MotionEvent.ACTION_MOVE:
+                    if (isLeftJoystickActive) {
+                        // Calculate the relative vertical movement from the initial touch point
+                        float deltaY = initialTouchY - event.getY();
+
+                        // Get container height for normalization
+                        int containerHeight = binding.leftJoystickContainer.getHeight();
+
+                        // Normalize to -1.0 to 1.0 range with a scaling factor for sensitivity
+                        // Negative deltaY means moving down (backward), positive means moving up (forward)
+                        float scalingFactor = 2.0f; // Adjust this for sensitivity
+                        float normalizedDeltaY = (deltaY / containerHeight) * scalingFactor;
+
+                        // Clamp the value between -1.0 and 1.0
+                        normalizedDeltaY = Math.max(-1.0f, Math.min(1.0f, normalizedDeltaY));
+
+                        // Update the velocity value
+                        currentVelocityValue = normalizedDeltaY;
+
+                        // Convert to progress value (0-100) for the joystick visualization
+                        int progress = (int)((normalizedDeltaY * 50) + 50);
+
+                        // Update joystick thumb position
+                        updateAccelerationJoystickPosition(progress);
+
+                        // Update vehicle controls
+                        updateDirectionalControls();
+                        return true;
+                    }
+                    break;
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    // Reset to center when touch is released
+                    isLeftJoystickActive = false;
+                    currentVelocityValue = 0;
+                    updateAccelerationJoystickPosition(50);
+                    updateDirectionalControls();
+                    return true;
             }
+            return false;
         });
 
-        // Set up velocity pedal
-        binding.velocityPedal.setOnValueChangeListener(new TouchPedalView.OnValueChangeListener() {
-            @Override
-            public void onValueChanged(float value) {
-                currentVelocityValue = value;
-                // Note: We don't call updateWheelControls() here as it will be called by the timer
-            }
+        // Set up steering joystick (right side) with touch listener
+        binding.rightJoystickContainer.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    // Record the initial touch position as the reference point
+                    initialTouchX = event.getX();
+                    isRightJoystickActive = true;
+                    return true;
 
-            @Override
-            public void onTouchEnd() {
-                // Auto-center when touch is released
-                currentVelocityValue = 0;
-                // Immediately update controls when touch ends for responsive feel
-                updateWheelControls();
+                case MotionEvent.ACTION_MOVE:
+                    if (isRightJoystickActive) {
+                        // Calculate the relative horizontal movement from the initial touch point
+                        float deltaX = event.getX() - initialTouchX;
+
+                        // Get container width for normalization
+                        int containerWidth = binding.rightJoystickContainer.getWidth();
+
+                        // Normalize to -1.0 to 1.0 range with a scaling factor for sensitivity
+                        // Negative deltaX means moving left, positive means moving right
+                        float scalingFactor = 2.0f; // Adjust this for sensitivity
+                        float normalizedDeltaX = (deltaX / containerWidth) * scalingFactor;
+
+                        // Clamp the value between -1.0 and 1.0
+                        normalizedDeltaX = Math.max(-1.0f, Math.min(1.0f, normalizedDeltaX));
+
+                        // Update the steering value
+                        currentSteeringValue = normalizedDeltaX;
+
+                        // Convert to progress value (0-100) for the joystick visualization
+                        int progress = (int)((normalizedDeltaX * 50) + 50);
+
+                        // Update joystick thumb position
+                        updateSteeringJoystickPosition(progress);
+
+                        // Update vehicle controls
+                        updateDirectionalControls();
+                        return true;
+                    }
+                    break;
+
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    // Reset to center when touch is released
+                    isRightJoystickActive = false;
+                    currentSteeringValue = 0;
+                    updateSteeringJoystickPosition(50);
+                    updateDirectionalControls();
+                    return true;
             }
+            return false;
         });
+
+        // Initialize joystick positions with center values (50)
+        binding.forwardSeekBar.setProgress(50);
+        binding.rightSeekBar.setProgress(50);
+        updateAccelerationJoystickPosition(50);
+        updateSteeringJoystickPosition(50);
+
+        // Set up emergency stop button with long/short press logic
+        binding.centerStopButton.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    isLongPress = false;
+                    // Provide haptic feedback for emergency stop
+                    vibrateEmergencyStop();
+                    // Use emergencyStop interface
+                    if (vehicle != null) vehicle.emergencyStop(true);
+                    // Start long press detection
+                    stopHandler.postDelayed(() -> {
+                        isLongPress = true;
+                        binding.unlockButton.setVisibility(View.VISIBLE);
+                    }, LONG_PRESS_THRESHOLD);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    stopHandler.removeCallbacksAndMessages(null);
+                    if (!isLongPress) {
+                        // Schedule release after 5 seconds
+                        if (stopReleaseRunnable != null) stopHandler.removeCallbacks(stopReleaseRunnable);
+                        stopReleaseRunnable = () -> { if (vehicle != null) vehicle.emergencyStop(false); };
+                        stopHandler.postDelayed(stopReleaseRunnable, STOP_RELEASE_DELAY);
+                    }
+                    return true;
+            }
+            return false;
+        });
+
+        binding.unlockButton.setOnClickListener(v -> {
+            if (vehicle != null) vehicle.emergencyStop(false);
+            binding.unlockButton.setVisibility(View.GONE);
+        });
+
+        // Update connection status
+        updateConnectionStatus();
     }
 
-    private void updateWheelControls() {
-        if (currentDriveMode != DRIVE_MODE_WHEEL) return;
+    /**
+     * Updates the connection status (now hidden but kept for callback compatibility)
+     */
+    private void updateConnectionStatus() {
+        // Connection status is now hidden, but we keep the method for compatibility
+    }
 
-        // Use velocity pedal value for linear velocity
+    /**
+     * Updates the position of the acceleration joystick thumb based on seekbar progress
+     */
+    private void updateAccelerationJoystickPosition(int progress) {
+        if (binding == null) return;
+
+        // Calculate vertical position (progress 0 = bottom, 100 = top)
+        // Note: Since the SeekBar is rotated 270 degrees, higher progress means moving up
+        float verticalOffset = (progress - 50) / 50.0f; // -1.0 to 1.0
+
+        // Get the container dimensions
+        int containerHeight = binding.leftJoystickContainer.getHeight();
+        int containerWidth = binding.leftJoystickContainer.getWidth();
+        int thumbSize = binding.accelerationJoystickThumb.getLayoutParams().height;
+
+        // If container dimensions are 0, view might not be laid out yet
+        if (containerHeight == 0) {
+            containerHeight = 150; // Default from layout
+        }
+        if (containerWidth == 0) {
+            containerWidth = 150; // Default from layout
+        }
+
+        // If thumb size is 0, use the default from layout
+        if (thumbSize == 0) {
+            thumbSize = 50; // Default from layout
+        }
+
+        // Calculate the usable vertical range (accounting for thumb size)
+        double usableHeight = containerHeight - thumbSize;
+
+        // For linear vertical movement:
+        // - When verticalOffset is -1.0, thumb should be at the bottom
+        // - When verticalOffset is 0.0, thumb should be in the middle
+        // - When verticalOffset is 1.0, thumb should be at the top
+
+        // Calculate the new position
+        // Center horizontally in the container
+        int newX = (containerWidth - thumbSize) / 2;
+
+        // Map verticalOffset (-1.0 to 1.0) to vertical position
+        // Start from the center and move up or down based on the offset
+        int centerY = containerHeight / 2;
+        int newY = centerY - (int)((usableHeight / 2) * verticalOffset);
+
+        // Adjust to position the top-left corner of the thumb
+        newY -= thumbSize / 2;
+
+        // Apply the new position - strictly vertical movement
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) binding.accelerationJoystickThumb.getLayoutParams();
+        params.leftMargin = newX;
+        params.topMargin = newY;
+        params.gravity = Gravity.TOP | Gravity.LEFT;
+        binding.accelerationJoystickThumb.setLayoutParams(params);
+
+        // Update arrow colors based on direction
+        if (verticalOffset > 0.1) {
+            // Forward
+            binding.accelerationArrowUp.setColorFilter(getResources().getColor(android.R.color.white));
+            binding.accelerationArrowDown.setColorFilter(getResources().getColor(R.color.satiBotRed));
+        } else if (verticalOffset < -0.1) {
+            // Backward
+            binding.accelerationArrowUp.setColorFilter(getResources().getColor(R.color.satiBotRed));
+            binding.accelerationArrowDown.setColorFilter(getResources().getColor(android.R.color.white));
+        } else {
+            // Neutral
+            binding.accelerationArrowUp.setColorFilter(getResources().getColor(R.color.satiBotRed));
+            binding.accelerationArrowDown.setColorFilter(getResources().getColor(R.color.satiBotRed));
+        }
+    }
+
+    /**
+     * Updates the position of the steering joystick thumb based on seekbar progress
+     */
+    private void updateSteeringJoystickPosition(int progress) {
+        if (binding == null) return;
+
+        // Calculate horizontal position (progress 0 = left, 100 = right)
+        float horizontalOffset = (progress - 50) / 50.0f; // -1.0 to 1.0
+
+        // Get the container dimensions
+        int containerSize = binding.rightJoystickContainer.getWidth();
+        int thumbSize = binding.steeringJoystickThumb.getLayoutParams().width;
+
+        // If container size is 0, view might not be laid out yet
+        if (containerSize == 0) {
+            containerSize = 150; // Default from layout
+        }
+
+        // If thumb size is 0, use the default from layout
+        if (thumbSize == 0) {
+            thumbSize = 50; // Default from layout
+        }
+
+        // Calculate the center point of the container
+        int centerX = containerSize / 2;
+        int centerY = containerSize / 2;
+
+        // Calculate the radius of the circle (distance from center to where thumb should be)
+        // Subtract half the thumb size to ensure the thumb's center stays on the circle
+        double radius = (containerSize / 2) - (thumbSize / 2);
+
+        // For horizontal movement along a circle:
+        // We'll use a 180-degree arc (from -90° at left to +90° at right)
+        double angleInDegrees = horizontalOffset * 90; // Maps -1.0...1.0 to -90°...90°
+        double angleInRadians = Math.toRadians(angleInDegrees);
+
+        // Calculate position using parametric equation of a circle
+        // sin(angle) gives us the x-component, cos(angle) gives us the y-component
+        // We negate cos because in screen coordinates, y increases downward
+        int newX = centerX + (int)(radius * Math.sin(angleInRadians));
+        int newY = centerY - (int)(radius * Math.cos(angleInRadians));
+
+        // Adjust for the thumb's size to position its top-left corner
+        newX -= thumbSize / 2;
+        newY -= thumbSize / 2;
+
+        // Apply the new position
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) binding.steeringJoystickThumb.getLayoutParams();
+        params.leftMargin = newX;
+        params.topMargin = newY;
+        params.gravity = Gravity.TOP | Gravity.LEFT;
+        binding.steeringJoystickThumb.setLayoutParams(params);
+
+        // Update arrow colors based on direction
+        if (horizontalOffset > 0.1) {
+            // Right
+            binding.steeringArrowRight.setColorFilter(getResources().getColor(android.R.color.white));
+            binding.steeringArrowLeft.setColorFilter(getResources().getColor(R.color.satiBotRed));
+        } else if (horizontalOffset < -0.1) {
+            // Left
+            binding.steeringArrowRight.setColorFilter(getResources().getColor(R.color.satiBotRed));
+            binding.steeringArrowLeft.setColorFilter(getResources().getColor(android.R.color.white));
+        } else {
+            // Neutral
+            binding.steeringArrowRight.setColorFilter(getResources().getColor(R.color.satiBotRed));
+            binding.steeringArrowLeft.setColorFilter(getResources().getColor(R.color.satiBotRed));
+        }
+    }
+
+    private void updateDirectionalControls() {
+        // Use velocity value for linear velocity (forward/backward)
         float linear = currentVelocityValue;
 
-        // Use steering wheel value for angular velocity
-        float angular = currentSteeringValue; // Scale steering to get reasonable angular velocity
+        // Use steering value for angular velocity (left/right)
+        float angular = currentSteeringValue;
 
         // Update vehicle control with linear and angular velocity
         vehicle.setControlVelocity(linear, angular);
         handleDriveCommand();
+
+        // Provide haptic feedback for high velocity or steering values
+        provideHapticFeedback(linear, angular);
+    }
+
+    /**
+     * Initializes the vibrator service
+     */
+    private void initializeVibrator() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // For Android 12 and above, use VibratorManager
+            VibratorManager vibratorManager = (VibratorManager) requireContext().getSystemService(Context.VIBRATOR_MANAGER_SERVICE);
+            if (vibratorManager != null) {
+                vibrator = vibratorManager.getDefaultVibrator();
+            }
+        } else {
+            // For older Android versions
+            vibrator = (Vibrator) requireContext().getSystemService(Context.VIBRATOR_SERVICE);
+        }
+    }
+
+    /**
+     * Provides haptic feedback based on linear and angular velocity values
+     * @param linear Linear velocity (-1.0 to 1.0)
+     * @param angular Angular velocity (-1.0 to 1.0)
+     */
+    private void provideHapticFeedback(float linear, float angular) {
+        if (vibrator == null || !vibrator.hasVibrator() || !hapticFeedbackEnabled) {
+            return;
+        }
+
+        long currentTime = System.currentTimeMillis();
+
+        // Check if linear velocity exceeds threshold (left side of phone)
+        float absLinear = Math.abs(linear);
+        if (absLinear >= HAPTIC_THRESHOLD) {
+            // Calculate normalized intensity based on where the value falls between threshold and max
+            float normalizedIntensity = calculateNormalizedIntensity(absLinear);
+
+            // If we're already vibrating, only update if cooldown has passed or intensity changed significantly
+            if (!isLeftVibrating ||
+                (currentTime - lastLeftHapticTime) > HAPTIC_COOLDOWN ||
+                Math.abs(normalizedIntensity - lastLeftIntensity) > 0.15f) {
+
+                // Vibrate with intensity proportional to velocity
+                vibrateLeft(normalizedIntensity);
+                lastLeftHapticTime = currentTime;
+                lastLeftIntensity = normalizedIntensity;
+                isLeftVibrating = true;
+            }
+        } else if (isLeftVibrating) {
+            // Stop vibration if below threshold
+            stopVibration();
+            isLeftVibrating = false;
+            lastLeftIntensity = 0.0f;
+        }
+
+        // Check if angular velocity exceeds threshold (right side of phone)
+        float absAngular = Math.abs(angular);
+        if (absAngular >= HAPTIC_THRESHOLD) {
+            // Calculate normalized intensity based on where the value falls between threshold and max
+            float normalizedIntensity = calculateNormalizedIntensity(absAngular);
+
+            // If we're already vibrating, only update if cooldown has passed or intensity changed significantly
+            // Use longer cooldown for steering to reduce vibration frequency
+            if (!isRightVibrating ||
+                (currentTime - lastRightHapticTime) > HAPTIC_COOLDOWN_STEERING ||
+                Math.abs(normalizedIntensity - lastRightIntensity) > 0.15f) {
+
+                // Vibrate with intensity proportional to steering
+                vibrateRight(normalizedIntensity);
+                lastRightHapticTime = currentTime;
+                lastRightIntensity = normalizedIntensity;
+                isRightVibrating = true;
+            }
+        } else if (isRightVibrating) {
+            // Stop vibration if below threshold
+            stopVibration();
+            isRightVibrating = false;
+            lastRightIntensity = 0.0f;
+        }
+    }
+
+    /**
+     * Calculates a normalized intensity value (0.0 to 1.0) based on where the input value
+     * falls between the threshold and max threshold
+     * @param value The input value (0.0 to 1.0)
+     * @return Normalized intensity (0.0 to 1.0)
+     */
+    private float calculateNormalizedIntensity(float value) {
+        // If below threshold, return 0
+        if (value < HAPTIC_THRESHOLD) {
+            return 0.0f;
+        }
+
+        // If above max threshold, return 1
+        if (value >= HAPTIC_MAX_THRESHOLD) {
+            return 1.0f;
+        }
+
+        // Calculate where the value falls between threshold and max threshold (0.0 to 1.0)
+        return (value - HAPTIC_THRESHOLD) / (HAPTIC_MAX_THRESHOLD - HAPTIC_THRESHOLD);
+    }
+
+    /**
+     * Stops all vibrations
+     */
+    private void stopVibration() {
+        if (vibrator != null) {
+            vibrator.cancel();
+        }
+    }
+
+    /**
+     * Vibrates the left side of the phone (for linear velocity)
+     * @param intensity Intensity of vibration (0.0 to 1.0)
+     */
+    private void vibrateLeft(float intensity) {
+        if (vibrator == null) return;
+
+        // Cancel any ongoing vibrations first
+        vibrator.cancel();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // For Android 8.0 and above, use VibrationEffect
+            // Calculate amplitude based on intensity, scaling between min and max amplitude
+            int amplitudeRange = HAPTIC_MAX_AMPLITUDE - HAPTIC_MIN_AMPLITUDE;
+            int amplitude = HAPTIC_MIN_AMPLITUDE + (int)(amplitudeRange * intensity);
+
+            // Create a continuous vibration effect
+            VibrationEffect effect = VibrationEffect.createOneShot(HAPTIC_DURATION, amplitude);
+            vibrator.vibrate(effect);
+        } else {
+            // For older Android versions
+            // Use a fixed duration for continuous feel
+            vibrator.vibrate(HAPTIC_DURATION);
+        }
+    }
+
+    /**
+     * Vibrates the right side of the phone (for angular velocity)
+     * @param intensity Intensity of vibration (0.0 to 1.0)
+     */
+    private void vibrateRight(float intensity) {
+        if (vibrator == null) return;
+
+        // Cancel any ongoing vibrations first
+        vibrator.cancel();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // For Android 8.0 and above, use VibrationEffect
+            // Calculate amplitude based on intensity, scaling between min and max amplitude
+            // Use reduced amplitude range for steering to make vibration less strong
+            int amplitudeRange = HAPTIC_MAX_AMPLITUDE_STEERING - HAPTIC_MIN_AMPLITUDE;
+            int amplitude = HAPTIC_MIN_AMPLITUDE + (int)(amplitudeRange * intensity);
+
+            // Create a continuous vibration effect with a slightly different feel than left
+            // Use a slightly shorter duration to differentiate from left side
+            VibrationEffect effect = VibrationEffect.createOneShot(HAPTIC_DURATION - 100, amplitude);
+            vibrator.vibrate(effect);
+        } else {
+            // For older Android versions
+            // Use a slightly shorter duration to differentiate from left side
+            vibrator.vibrate(HAPTIC_DURATION - 100);
+        }
+    }
+
+    /**
+     * Provides a single strong vibration for emergency stop
+     */
+    private void vibrateEmergencyStop() {
+        if (vibrator == null || !vibrator.hasVibrator() || !hapticFeedbackEnabled) {
+            return;
+        }
+
+        // Cancel any ongoing vibrations first
+        vibrator.cancel();
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // For Android 8.0 and above, use VibrationEffect
+            // Create a single strong vibration
+            VibrationEffect effect = VibrationEffect.createOneShot(200, 255);
+            vibrator.vibrate(effect);
+        } else {
+            // For older Android versions
+            vibrator.vibrate(200);
+        }
     }
 
     /**
@@ -556,9 +888,7 @@ public class BluetoothControlFragment extends ControlsFragment {
             controlUpdateRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    if (currentDriveMode == DRIVE_MODE_WHEEL) {
-                        updateWheelControls();
-                    }
+                    updateDirectionalControls();
 
                     // Schedule the next update if still running
                     if (isControlUpdateRunning && controlUpdateHandler != null) {
@@ -572,7 +902,7 @@ public class BluetoothControlFragment extends ControlsFragment {
     /**
      * Starts continuous updates to send control values to the robot
      */
-    private void startControlUpdates() {
+    public void startControlUpdates() {
         // Initialize handler and runnable if needed
         initControlUpdateHandler();
 
@@ -587,7 +917,7 @@ public class BluetoothControlFragment extends ControlsFragment {
     /**
      * Stops the continuous control updates
      */
-    private void stopControlUpdates() {
+    public void stopControlUpdates() {
         isControlUpdateRunning = false;
 
         if (controlUpdateHandler != null && controlUpdateRunnable != null) {
@@ -598,29 +928,37 @@ public class BluetoothControlFragment extends ControlsFragment {
     @Override
     public void onResume() {
         super.onResume();
-        if (currentDriveMode == DRIVE_MODE_TILT) {
-            startTiltControl();
-        } else if (currentDriveMode == DRIVE_MODE_WHEEL) {
-            startControlUpdates();
+        startControlUpdates();
+        updateConnectionStatus();
+
+        // Initialize joystick positions
+        if (binding != null) {
+            binding.forwardSeekBar.setProgress(50);
+            binding.rightSeekBar.setProgress(50);
+
+            // Post to ensure view dimensions are available
+            binding.getRoot().post(() -> {
+                if (binding != null) {
+                    updateAccelerationJoystickPosition(50);
+                    updateSteeringJoystickPosition(50);
+                }
+            });
         }
     }
 
     @Override
     public void onPause() {
         super.onPause();
-        if (currentDriveMode == DRIVE_MODE_TILT) {
-            stopTiltControl();
-        }
         stopControlUpdates();
+
+        // Stop any ongoing vibrations
+        stopVibration();
+        isLeftVibrating = false;
+        isRightVibrating = false;
     }
 
     @Override
     public void onDestroyView() {
-        // Stop any active control modes
-        if (currentDriveMode == DRIVE_MODE_TILT) {
-            stopTiltControl();
-        }
-
         // Stop continuous control updates
         stopControlUpdates();
         controlUpdateHandler = null;
@@ -628,13 +966,14 @@ public class BluetoothControlFragment extends ControlsFragment {
 
         // Reset control values
         currentSteeringValue = 0.0f;
-        currentForwardValue = 0.0f;
-        currentBackwardValue = 0.0f;
         currentVelocityValue = 0.0f;
         normalizedLinearVelocity = 0.0f;
         targetAngularVelocity = 0.0f;
-        leftPwm = 0.0f;
-        rightPwm = 0.0f;
+
+        // Stop any ongoing vibrations
+        stopVibration();
+        isLeftVibrating = false;
+        isRightVibrating = false;
 
         // Restore default orientation
         requireActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);

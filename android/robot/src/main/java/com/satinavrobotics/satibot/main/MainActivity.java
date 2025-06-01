@@ -1,6 +1,6 @@
 package com.satinavrobotics.satibot.main;
 
-import static com.satibot.utils.Constants.DEVICE_ACTION_DATA_RECEIVED;
+import static com.satinavrobotics.satibot.utils.Constants.DEVICE_ACTION_DATA_RECEIVED;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -25,12 +25,14 @@ import androidx.navigation.fragment.NavHostFragment;
 import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import java.util.Objects;
 
-import org.openbot.R;
+import com.satinavrobotics.satibot.R;
 
 import com.satinavrobotics.satibot.SatiBotApplication;
+import com.satinavrobotics.satibot.livekit.LiveKitServer;
+import com.satinavrobotics.satibot.utils.ConnectionUtils;
 import com.satinavrobotics.satibot.utils.Constants;
+import com.satinavrobotics.satibot.utils.PermissionUtils;
 import com.satinavrobotics.satibot.vehicle.UsbConnection;
 import com.satinavrobotics.satibot.vehicle.Vehicle;
 
@@ -47,6 +49,7 @@ public class MainActivity extends AppCompatActivity {
   private LocalBroadcastManager localBroadcastManager;
   private BottomNavigationView bottomNavigationView;
   private NavController navController;
+  private LiveKitServer liveKitServer;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -55,7 +58,7 @@ public class MainActivity extends AppCompatActivity {
     viewModel = new ViewModelProvider(this).get(MainViewModel.class);
     vehicle = SatiBotApplication.vehicle;
     bottomNavigationView = findViewById(R.id.bottomNavigationView);
-    bottomNavigationView.setSelectedItemId(R.id.home);
+    bottomNavigationView.setSelectedItemId(R.id.mainFragment);
     //    if (vehicle == null) {
     //      SharedPreferences sharedPreferences =
     // PreferenceManager.getDefaultSharedPreferences(this);
@@ -64,6 +67,9 @@ public class MainActivity extends AppCompatActivity {
     //      vehicle.connectUsb();
     viewModel.setVehicle(vehicle);
     //    }
+
+    // Initialize LiveKit server
+    initializeLiveKitServer();
 
     localBroadcastReceiver =
         new BroadcastReceiver() {
@@ -119,7 +125,7 @@ public class MainActivity extends AppCompatActivity {
     localBroadcastManager = LocalBroadcastManager.getInstance(this);
     localBroadcastManager.registerReceiver(localBroadcastReceiver, localIntentFilter);
 
-    registerReceiver(localBroadcastReceiver, localIntentFilter);
+    registerReceiver(localBroadcastReceiver, localIntentFilter, Context.RECEIVER_NOT_EXPORTED);
 
     NavHostFragment navHostFragment =
         (NavHostFragment) getSupportFragmentManager().findFragmentById(R.id.nav_host_fragment);
@@ -134,15 +140,32 @@ public class MainActivity extends AppCompatActivity {
           // Do nothing when the selected item is already selected
         });
 
+    // Custom handling for bottom navigation item selection
+    bottomNavigationView.setOnItemSelectedListener(item -> {
+        int itemId = item.getItemId();
+        int currentDestId = navController.getCurrentDestination().getId();
+
+        // If we're already at the destination, do nothing
+        if (itemId == currentDestId) {
+            return true;
+        }
+
+        // Always navigate directly to the destination ID, not using actions
+        // This prevents the "cannot be found from the current destination" error
+        navController.navigate(itemId);
+        return true;
+    });
+
     NavigationUI.setupWithNavController(toolbar, navController, appBarConfiguration);
-    NavigationUI.setupWithNavController(bottomNavigationView, navController);
+    // Don't use automatic setup for bottom nav - we're handling it manually
+    // NavigationUI.setupWithNavController(bottomNavigationView, navController);
 
     navController.addOnDestinationChangedListener(
         (controller, destination, arguments) -> {
           if (destination.getId() == R.id.mainFragment
               || destination.getId() == R.id.settingsFragment
               || destination.getId() == R.id.usbFragment
-              || destination.getId() == R.id.projectsFragment
+              || destination.getId() == R.id.robotInfoFragment
               || destination.getId() == R.id.profileFragment) {
             toolbar.setVisibility(View.VISIBLE);
             bottomNavigationView.setVisibility(View.VISIBLE);
@@ -153,16 +176,12 @@ public class MainActivity extends AppCompatActivity {
 
           // To update the toolbar icon according to the Fragment.
           Menu menu = toolbar.getMenu();
-          if (destination.getId() == R.id.projectsFragment) {
-            menu.findItem(R.id.settingsFragment).setVisible(false);
-            menu.findItem(R.id.barCodeScannerFragment).setVisible(true);
-          } else {
-            menu.findItem(R.id.barCodeScannerFragment).setVisible(false);
-            if (vehicle.getConnectionType().equals("Bluetooth")) {
-              menu.findItem(R.id.bluetoothFragment).setVisible(true);
-            }
-            menu.findItem(R.id.settingsFragment).setVisible(true);
+          if (vehicle.getConnectionType().equals("Bluetooth")) {
+            menu.findItem(R.id.bluetoothFragment).setVisible(true);
           }
+          menu.findItem(R.id.settingsFragment).setVisible(true);
+          menu.findItem(R.id.liveKitInfoFragment).setVisible(true);
+          updateLiveKitIcon(menu);
         });
 
     //    if (savedInstanceState == null) {
@@ -176,15 +195,6 @@ public class MainActivity extends AppCompatActivity {
   public boolean onCreateOptionsMenu(Menu menu) {
     // Inflate the menu; this adds items to the action bar if it is present.
     getMenuInflater().inflate(R.menu.menu_items, menu);
-    // Get the current destination id.
-    int currentDestinationId =
-        Objects.requireNonNull(navController.getCurrentDestination()).getId();
-    if (currentDestinationId == R.id.projectsFragment) {
-      menu.findItem(R.id.barCodeScannerFragment).setVisible(true);
-      menu.findItem(R.id.settingsFragment).setVisible(false);
-    } else {
-      menu.findItem(R.id.barCodeScannerFragment).setVisible(false);
-    }
     if (vehicle.getConnectionType().equals("Bluetooth")) {
       menu.findItem(R.id.usbFragment).setVisible(false);
       menu.findItem(R.id.bluetoothFragment).setVisible(true);
@@ -192,14 +202,19 @@ public class MainActivity extends AppCompatActivity {
       menu.findItem(R.id.usbFragment).setVisible(true);
       menu.findItem(R.id.bluetoothFragment).setVisible(false);
     }
+
+    // Update LiveKit and Bluetooth icons
+    updateLiveKitIcon(menu);
+    updateBluetoothIcon(menu);
+
     return true;
   }
 
   @Override
   public boolean onOptionsItemSelected(MenuItem item) {
     NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment);
-    if (item.getItemId() == R.id.barCodeScannerFragment) {
-      navController.navigate(R.id.barCodeScannerFragment);
+    if (item.getItemId() == R.id.liveKitInfoFragment) {
+      navController.navigate(R.id.liveKitInfoFragment);
       return true;
     }
 
@@ -250,10 +265,98 @@ public class MainActivity extends AppCompatActivity {
   @Override
   protected void onResume() {
     super.onResume();
+    // Start periodic updates of LiveKit and Bluetooth icons
+    startIconUpdates();
+
+    // Attempt to reconnect LiveKit if it was previously connected but is now disconnected
+    attemptLiveKitReconnection();
   }
 
   @Override
   protected void onPause() {
     super.onPause();
+  }
+
+  private void initializeLiveKitServer() {
+    try {
+      liveKitServer = LiveKitServer.getInstance(this);
+
+      // Auto-connect if permissions are available and internet is connected
+      if (PermissionUtils.hasControllerPermissions(this) &&
+          ConnectionUtils.isInternetAvailable(this)) {
+        liveKitServer.connect();
+      } else if (!ConnectionUtils.isInternetAvailable(this)) {
+        Timber.w("No internet connection available, skipping auto-connect to LiveKit");
+      }
+    } catch (Exception e) {
+      Timber.e(e, "Failed to initialize LiveKit server");
+    }
+  }
+
+  private void updateLiveKitIcon(Menu menu) {
+    MenuItem liveKitItem = menu.findItem(R.id.liveKitInfoFragment);
+    if (liveKitItem != null && liveKitServer != null) {
+      boolean isConnected = liveKitServer.isRoomConnected();
+      liveKitItem.setIcon(isConnected ?
+        R.drawable.ic_livekit_connected :
+        R.drawable.ic_livekit_disconnected);
+    }
+  }
+
+  private void updateBluetoothIcon(Menu menu) {
+    MenuItem bluetoothItem = menu.findItem(R.id.bluetoothFragment);
+    if (bluetoothItem != null && vehicle != null) {
+      boolean isConnected = vehicle.bleConnected();
+      bluetoothItem.setIcon(isConnected ?
+        R.drawable.ic_bluetooth_connected_white :
+        R.drawable.ic_bluetooth_disconnected);
+    }
+  }
+
+  private void startIconUpdates() {
+    // Update LiveKit and Bluetooth icons every 3 seconds
+    Runnable updateRunnable = new Runnable() {
+      @Override
+      public void run() {
+        if (!isDestroyed() && !isFinishing()) {
+          Toolbar toolbar = findViewById(R.id.toolbar);
+          if (toolbar != null) {
+            updateLiveKitIcon(toolbar.getMenu());
+            updateBluetoothIcon(toolbar.getMenu());
+          }
+          // Schedule next update
+          toolbar.postDelayed(this, 3000);
+        }
+      }
+    };
+
+    Toolbar toolbar = findViewById(R.id.toolbar);
+    if (toolbar != null) {
+      toolbar.post(updateRunnable);
+    }
+  }
+
+  private void attemptLiveKitReconnection() {
+    if (liveKitServer == null) {
+      return;
+    }
+
+    // Only attempt reconnection if we have the necessary permissions and internet connectivity
+    if (PermissionUtils.hasControllerPermissions(this) &&
+        ConnectionUtils.isInternetAvailable(this)) {
+
+      // Check if LiveKit is currently disconnected
+      if (!liveKitServer.isRoomConnected()) {
+        Timber.d("Attempting to reconnect LiveKit after app resume");
+        liveKitServer.connect();
+      }
+    } else {
+      if (!ConnectionUtils.isInternetAvailable(this)) {
+        Timber.w("No internet connection available, skipping LiveKit reconnection");
+      }
+      if (!PermissionUtils.hasControllerPermissions(this)) {
+        Timber.w("Missing permissions, skipping LiveKit reconnection");
+      }
+    }
   }
 }

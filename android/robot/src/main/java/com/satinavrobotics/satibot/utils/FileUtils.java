@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Objects;
 
 import com.satinavrobotics.satibot.googleServices.GoogleServices;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
+import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
 import com.satinavrobotics.satibot.tflite.Model;
 
 public class FileUtils {

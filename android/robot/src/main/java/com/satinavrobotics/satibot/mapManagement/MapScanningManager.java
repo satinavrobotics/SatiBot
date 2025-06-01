@@ -37,6 +37,9 @@ public class MapScanningManager {
     @GuardedBy("anchorLock") private final Map<Anchor, Pose> anchorPoses = new HashMap<>();
     @GuardedBy("anchorLock") private final Map<Anchor, Long> anchorStartTimes = new HashMap<>();
 
+    // Track the origin anchor (first anchor placed) for local coordinate system
+    @GuardedBy("anchorLock") @Nullable private AnchorWithCloudId originAnchor = null;
+
     // We're using direct callbacks from hostCloudAnchorAsync, so we don't need to track tasks
 
     /**
@@ -71,6 +74,7 @@ public class MapScanningManager {
      */
     public void setSession(Session session) {
         this.session = session;
+        Timber.d("Session set in MapScanningManager. Current hosted anchors: %d", hostedAnchors.size());
     }
 
     /**
@@ -93,7 +97,15 @@ public class MapScanningManager {
             }
 
             Pose pose = anchor.getPose();
-            hostedAnchors.add(new AnchorWithCloudId(anchor, cloudAnchorId, pose));
+            AnchorWithCloudId newAnchorWithCloudId = new AnchorWithCloudId(anchor, cloudAnchorId, pose);
+            hostedAnchors.add(newAnchorWithCloudId);
+
+            // If this is the first anchor, set it as the origin for local coordinates
+            if (originAnchor == null) {
+                originAnchor = newAnchorWithCloudId;
+                Timber.d("Set first anchor as origin for local coordinate system: %s", cloudAnchorId);
+            }
+
             Timber.d("Added hosted anchor with cloud ID: %s, total anchors: %d", cloudAnchorId, hostedAnchors.size());
         }
     }
@@ -127,7 +139,8 @@ public class MapScanningManager {
             hostedAnchors.clear();
             anchorPoses.clear();
             anchorStartTimes.clear();
-            Timber.d("Cleared all anchors");
+            originAnchor = null; // Reset the origin anchor
+            Timber.d("Cleared all anchors and reset origin anchor");
         }
     }
 
@@ -230,5 +243,104 @@ public class MapScanningManager {
      */
     public void onUpdate() {
         // No implementation needed as we're using direct callbacks from hostCloudAnchorAsync
+    }
+
+    /**
+     * Gets the origin anchor (first anchor placed) for the local coordinate system.
+     *
+     * @return The origin anchor, or null if no anchors have been placed
+     */
+    @Nullable
+    public AnchorWithCloudId getOriginAnchor() {
+        synchronized (anchorLock) {
+            return originAnchor;
+        }
+    }
+
+    /**
+     * Calculates the local coordinates of an anchor relative to the origin anchor.
+     *
+     * @param anchor The anchor to calculate local coordinates for
+     * @return A float array containing the local [x, y, z] coordinates, or null if there's no origin anchor
+     */
+    @Nullable
+    public float[] calculateLocalCoordinates(AnchorWithCloudId anchor) {
+        synchronized (anchorLock) {
+            if (originAnchor == null) {
+                Timber.w("Cannot calculate local coordinates: no origin anchor set");
+                return null;
+            }
+
+            // Get the poses
+            Pose originPose = originAnchor.getPose();
+            Pose anchorPose = anchor.getPose();
+
+            // Calculate the relative pose (transform from origin to anchor)
+            Pose relativePose = originPose.inverse().compose(anchorPose);
+
+            // Extract the translation component
+            float[] translation = new float[3];
+            relativePose.getTranslation(translation, 0);
+
+            Timber.d("Calculated local coordinates for anchor %s: [%f, %f, %f]",
+                    anchor.getCloudAnchorId(), translation[0], translation[1], translation[2]);
+
+            return translation;
+        }
+    }
+
+    /**
+     * Calculates the local orientation (quaternion) of an anchor relative to the origin anchor.
+     *
+     * @param anchor The anchor to calculate local orientation for
+     * @return A float array containing the local quaternion [x, y, z, w], or null if there's no origin anchor
+     */
+    @Nullable
+    public float[] calculateLocalOrientation(AnchorWithCloudId anchor) {
+        synchronized (anchorLock) {
+            if (originAnchor == null) {
+                Timber.w("Cannot calculate local orientation: no origin anchor set");
+                return null;
+            }
+
+            // Get the poses
+            Pose originPose = originAnchor.getPose();
+            Pose anchorPose = anchor.getPose();
+
+            // Calculate the relative pose (transform from origin to anchor)
+            Pose relativePose = originPose.inverse().compose(anchorPose);
+
+            // Extract the rotation component as quaternion
+            float[] rotation = new float[4];
+            relativePose.getRotationQuaternion(rotation, 0);
+
+            Timber.d("Calculated local orientation for anchor %s: [%f, %f, %f, %f]",
+                    anchor.getCloudAnchorId(), rotation[0], rotation[1], rotation[2], rotation[3]);
+
+            return rotation;
+        }
+    }
+
+    /**
+     * Calculates both local coordinates and orientation of an anchor relative to the origin anchor.
+     *
+     * @param anchor The anchor to calculate local pose for
+     * @return A Pose object representing the local pose, or null if there's no origin anchor
+     */
+    @Nullable
+    public Pose calculateLocalPose(AnchorWithCloudId anchor) {
+        synchronized (anchorLock) {
+            if (originAnchor == null) {
+                Timber.w("Cannot calculate local pose: no origin anchor set");
+                return null;
+            }
+
+            // Get the poses
+            Pose originPose = originAnchor.getPose();
+            Pose anchorPose = anchor.getPose();
+
+            // Calculate the relative pose (transform from origin to anchor)
+            return originPose.inverse().compose(anchorPose);
+        }
     }
 }

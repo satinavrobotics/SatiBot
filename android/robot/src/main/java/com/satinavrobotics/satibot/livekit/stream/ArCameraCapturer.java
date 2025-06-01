@@ -1,5 +1,5 @@
 
-package com.satinavrobotics.satibot.robot;
+package com.satinavrobotics.satibot.livekit.stream;
 
 
 import android.content.Context;
@@ -36,7 +36,8 @@ public class ArCameraCapturer extends CameraCapturer {
         if (cameraName.equals(AR_DEVICE_NAME)) {
             arCameraSession.setCameraSession(createSessionCallback, events);
             arCameraSession.setCameraThreadHandler(getCameraThreadHandler());
-            arCameraSession.onDone();
+            // Start the ARCore session (this will resume ARCore if needed)
+            arCameraSession.startArCoreSession();
         } else if (cameraName.equals(EXTERNAL_DEVICE_NAME)) {
             externalCameraSession.setCameraSession(createSessionCallback, events);
             externalCameraSession.setCameraThreadHandler(getCameraThreadHandler());

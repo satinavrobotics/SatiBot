@@ -55,8 +55,8 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-import org.openbot.R;
-import org.openbot.databinding.FragmentMapResolvingBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentMapResolvingBinding;
 
 import com.satinavrobotics.satibot.env.CameraPermissionHelper;
 import com.satinavrobotics.satibot.env.DisplayRotationHelper;
@@ -67,7 +67,7 @@ import com.satinavrobotics.satibot.mapManagement.rendering.ObjectRenderer;
 import com.satinavrobotics.satibot.mapManagement.rendering.PlaneRenderer;
 import com.satinavrobotics.satibot.mapManagement.rendering.PointCloudRenderer;
 import com.satinavrobotics.satibot.mapManagement.rendering.WaypointRenderer;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
+import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -149,6 +149,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
     // Geospatial API components
     private Earth earth;
     private boolean isEarthMode = false;
+    private boolean isNoMapMode = false;
     private TextView geospatialInfoText;
     private TextView vpsStatusText;
     private FusedLocationProviderClient fusedLocationClient;
@@ -210,9 +211,10 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                 // Clean up resources before navigating back
                 cleanupResources();
 
-                // Navigate back
+                // Navigate directly to the map management fragment instead of using popBackStack
+                // This prevents navigation issues when returning to this fragment
                 if (isAdded() && getView() != null) {
-                    Navigation.findNavController(getView()).popBackStack();
+                    Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                 }
             }
         };
@@ -319,9 +321,9 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                 // Clean up resources before navigating back
                 cleanupResources();
 
-                // Navigate back
+                // Navigate directly to the map management fragment instead of using popBackStack
                 if (isAdded() && getView() != null) {
-                    Navigation.findNavController(getView()).popBackStack();
+                    Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                 }
             }
         });
@@ -414,7 +416,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
             // Clean up and navigate back
             cleanupResources();
             if (isAdded() && getView() != null) {
-                Navigation.findNavController(getView()).popBackStack();
+                Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
             }
             return;
         }
@@ -437,6 +439,23 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
             vpsStatusText.setText("Checking VPS availability...");
 
             // No anchors to resolve in Earth mode
+            resolvedCountText.setVisibility(View.GONE);
+        }
+        // Check if this is the No Map option
+        else if ("no_map".equals(mapId)) {
+            isNoMapMode = true;
+            statusText.setText("No Map Mode - Using Direct ARCore Pose");
+
+            // Create a special No Map object
+            currentMap = new Map();
+            currentMap.setId("no_map");
+            currentMap.setName("No Map");
+
+            // Hide the geospatial info and VPS status texts
+            geospatialInfoText.setVisibility(View.GONE);
+            vpsStatusText.setVisibility(View.GONE);
+
+            // No anchors to resolve in No Map mode
             resolvedCountText.setVisibility(View.GONE);
 
             // Check if Geospatial API is supported on this device
@@ -479,7 +498,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                             // Clean up and navigate back
                             cleanupResources();
                             if (isAdded() && getView() != null) {
-                                Navigation.findNavController(getView()).popBackStack();
+                                Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                             }
                         }
                     } else {
@@ -487,7 +506,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                         // Clean up and navigate back
                         cleanupResources();
                         if (isAdded() && getView() != null) {
-                            Navigation.findNavController(getView()).popBackStack();
+                                Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                         }
                     }
                 })
@@ -496,7 +515,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                     // Clean up and navigate back
                     cleanupResources();
                     if (isAdded() && getView() != null) {
-                        Navigation.findNavController(getView()).popBackStack();
+                                Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                     }
                 });
     }
@@ -504,11 +523,11 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
     private void updateMapInfo() {
         if (currentMap == null) return;
 
-        // Handle Earth mode differently
-        if (isEarthMode) {
+        // Handle Earth mode and No Map mode differently
+        if (isEarthMode || isNoMapMode) {
             requireActivity().runOnUiThread(() -> {
                 statusText.setText("Map: " + currentMap.getName());
-                // Hide the resolved count text in Earth mode
+                // Hide the resolved count text in special modes
                 resolvedCountText.setVisibility(View.GONE);
             });
             return;
@@ -530,8 +549,8 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
     }
 
     private void resolveAnchors() {
-        // Skip anchor resolution for Earth mode
-        if (isEarthMode) {
+        // Skip anchor resolution for Earth mode or No Map mode
+        if (isEarthMode || isNoMapMode) {
             return;
         }
 
@@ -860,7 +879,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
             float[] colorCorrectionRgba = new float[4];
             frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
-            // Handle Earth mode or normal cloud anchor mode
+            // Handle Earth mode, No Map mode, or normal cloud anchor mode
             if (isEarthMode) {
                 // In Earth mode, get the Earth object and check if it's tracking
                 earth = session.getEarth();
@@ -905,6 +924,21 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                         }
                     });
                 }
+            } else if (isNoMapMode) {
+                // In No Map mode, just use the direct ARCore pose
+                // Update status text with current tracking state
+                requireActivity().runOnUiThread(() -> {
+                    statusText.setText("No Map Mode - Using Direct ARCore Pose");
+                });
+
+                // Optionally, visualize the camera position with a marker
+                Pose cameraPose = camera.getPose();
+                cameraPose.toMatrix(anchorMatrix, 0);
+
+                // Draw a 3D object at the camera position with a different color
+                float scaleFactor = 0.5f;
+                anchorRenderer.updateModelMatrix(anchorMatrix, scaleFactor);
+                anchorRenderer.draw(viewMatrix, projectionMatrix, colorCorrectionRgba, new float[]{1.0f, 0.0f, 1.0f, 1.0f}); // Purple color
             } else {
                 // Normal cloud anchor mode - draw all resolved anchors
                 for (MapResolvingManager.ResolvedAnchor resolvedAnchor : mapResolvingManager.getResolvedAnchors()) {
@@ -1140,7 +1174,44 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
             return; // Already enabled
         }
 
-        // Create the dense mapping manager
+        // Find the origin anchor (the one with local coordinates 0,0,0)
+        Pose originPose = null;
+        String originAnchorId = null;
+
+        // First, find the anchor with local coordinates (0,0,0) in the Map object
+        if (currentMap != null && currentMap.getAnchors() != null) {
+            for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+                if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                    originAnchorId = mapAnchor.getCloudAnchorId();
+                    Timber.d("Found origin anchor with ID: %s", originAnchorId);
+                    break;
+                }
+            }
+        }
+
+        // If we found the origin anchor ID, get its resolved anchor and pose
+        if (originAnchorId != null) {
+            MapResolvingManager.ResolvedAnchor resolvedOriginAnchor =
+                    mapResolvingManager.getResolvedAnchor(originAnchorId);
+
+            if (resolvedOriginAnchor != null) {
+                originPose = resolvedOriginAnchor.getAnchor().getPose();
+                Timber.d("Using origin anchor (ID: %s) for local coordinate system with pose: %s",
+                        originAnchorId, originPose);
+            } else {
+                Timber.w("Origin anchor (ID: %s) was not successfully resolved", originAnchorId);
+            }
+        }
+
+        // If we couldn't find the origin anchor or it wasn't resolved, compute it from the closest anchor
+        if (originPose == null) {
+            originPose = computeOriginPoseFromClosestAnchor("dense mapping");
+            if (originPose == null) {
+                Timber.e("No resolved anchors available for dense mapping");
+            }
+        }
+
+        // Create the dense mapping manager with the origin pose
         denseMappingManager = new DenseMappingManager(
                 requireContext(),
                 currentMap.getId(),
@@ -1173,7 +1244,8 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                             snackbarHelper.showError(requireActivity(), errorMessage);
                         });
                     }
-                });
+                },
+                originPose);
 
         // Update UI on the main thread
         requireActivity().runOnUiThread(() -> {
@@ -1228,10 +1300,53 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
         // Show saving message
         snackbarHelper.showMessage(requireActivity(), "Saving waypoints...");
 
-        // Convert waypoints to WaypointData objects
+        // Find the origin anchor (the one with local coordinates 0,0,0)
+        Pose originPose = null;
+        String originAnchorId = null;
+
+        // First, find the anchor with local coordinates (0,0,0) in the Map object
+        if (currentMap != null && currentMap.getAnchors() != null) {
+            for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+                if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                    originAnchorId = mapAnchor.getCloudAnchorId();
+                    Timber.d("Found origin anchor with ID: %s for waypoint saving", originAnchorId);
+                    break;
+                }
+            }
+        }
+
+        // If we found the origin anchor ID, get its resolved anchor and pose
+        if (originAnchorId != null) {
+            MapResolvingManager.ResolvedAnchor resolvedOriginAnchor =
+                    mapResolvingManager.getResolvedAnchor(originAnchorId);
+
+            if (resolvedOriginAnchor != null) {
+                originPose = resolvedOriginAnchor.getAnchor().getPose();
+                Timber.d("Using origin anchor (ID: %s) for waypoint saving with pose: %s",
+                        originAnchorId, originPose);
+            } else {
+                Timber.w("Origin anchor (ID: %s) was not successfully resolved for waypoint saving", originAnchorId);
+            }
+        }
+
+        // If we couldn't find the origin anchor or it wasn't resolved, compute it from the closest anchor
+        if (originPose == null) {
+            originPose = computeOriginPoseFromClosestAnchor("waypoint saving");
+        }
+
+        // Convert waypoints to WaypointData objects with local coordinates
         List<WaypointData> waypointDataList = new ArrayList<>();
         for (Waypoint waypoint : waypointGraph.getAllWaypoints()) {
-            WaypointData waypointData = new WaypointData(waypoint);
+            // Create WaypointData with local coordinates relative to the origin
+            WaypointData waypointData = new WaypointData(waypoint, originPose);
+
+            // Log the local coordinates for debugging
+            if (originPose != null) {
+                float[] localCoords = waypoint.calculateLocalCoordinates(originPose);
+                Timber.d("Waypoint %s local coordinates: [%f, %f, %f]",
+                        waypoint.getId(), localCoords[0], localCoords[1], localCoords[2]);
+            }
+
             waypointDataList.add(waypointData);
         }
 
@@ -1251,7 +1366,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
                     // Clean up resources and navigate back after successful save
                     cleanupResources();
                     if (isAdded() && getView() != null) {
-                        Navigation.findNavController(getView()).popBackStack();
+                        Navigation.findNavController(getView()).navigate(R.id.mapManagementFragment);
                     }
                 })
                 .addOnFailureListener(e -> {
@@ -1282,6 +1397,114 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
     }
 
     /**
+     * Computes the origin pose from the closest anchor to the origin when the true origin anchor
+     * has not been resolved yet.
+     *
+     * @param purpose A string describing the purpose (for logging)
+     * @return The computed origin pose, or null if it couldn't be computed
+     */
+    private Pose computeOriginPoseFromClosestAnchor(String purpose) {
+        if (currentMap == null || currentMap.getAnchors() == null) {
+            return null;
+        }
+
+        List<MapResolvingManager.ResolvedAnchor> resolvedAnchors = mapResolvingManager.getResolvedAnchors();
+        if (resolvedAnchors.isEmpty()) {
+            return null;
+        }
+
+        // Find the anchor closest to the origin based on local coordinates
+        Map.Anchor closestAnchor = null;
+        double minDistance = Double.MAX_VALUE;
+
+        for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+            // Skip anchors that are at the origin (they should have been found earlier)
+            if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                continue;
+            }
+
+            // Calculate distance to origin
+            double distance = mapAnchor.distanceToOrigin();
+            if (distance < minDistance) {
+                // Find the corresponding resolved anchor
+                MapResolvingManager.ResolvedAnchor resolvedAnchor =
+                        mapResolvingManager.getResolvedAnchor(mapAnchor.getCloudAnchorId());
+
+                if (resolvedAnchor != null) {
+                    minDistance = distance;
+                    closestAnchor = mapAnchor;
+                }
+            }
+        }
+
+        if (closestAnchor != null) {
+            // Get the resolved anchor for this map anchor
+            MapResolvingManager.ResolvedAnchor resolvedClosestAnchor =
+                    mapResolvingManager.getResolvedAnchor(closestAnchor.getCloudAnchorId());
+
+            if (resolvedClosestAnchor != null) {
+                // Get the world pose of the closest anchor
+                Pose closestAnchorPose = resolvedClosestAnchor.getAnchor().getPose();
+
+                // Create a pose with the negative local coordinates of the closest anchor
+                float[] translation = new float[] {
+                    (float)-closestAnchor.getLocalX(),
+                    (float)-closestAnchor.getLocalY(),
+                    (float)-closestAnchor.getLocalZ()
+                };
+
+                // Create a pose with the inverse of the local orientation
+                float[] rotation = new float[] {
+                    (float)-closestAnchor.getLocalQx(),
+                    (float)-closestAnchor.getLocalQy(),
+                    (float)-closestAnchor.getLocalQz(),
+                    (float)closestAnchor.getLocalQw()  // w component is positive for inverse
+                };
+
+                // Normalize the quaternion
+                float magnitude = (float)Math.sqrt(
+                    rotation[0] * rotation[0] +
+                    rotation[1] * rotation[1] +
+                    rotation[2] * rotation[2] +
+                    rotation[3] * rotation[3]
+                );
+
+                if (magnitude > 0) {
+                    rotation[0] /= magnitude;
+                    rotation[1] /= magnitude;
+                    rotation[2] /= magnitude;
+                    rotation[3] /= magnitude;
+                } else {
+                    // Default to identity quaternion if normalization fails
+                    rotation[0] = 0;
+                    rotation[1] = 0;
+                    rotation[2] = 0;
+                    rotation[3] = 1;
+                }
+
+                // Create a local-to-world transform
+                Pose localToWorld = new Pose(translation, rotation);
+
+                // Compute the origin pose by composing the closest anchor's pose with the local-to-world transform
+                Pose originPose = closestAnchorPose.compose(localToWorld);
+
+                Timber.d("Computed origin pose from closest anchor (ID: %s) for %s with local coordinates (%f, %f, %f) and orientation (%f, %f, %f, %f)",
+                        closestAnchor.getCloudAnchorId(),
+                        purpose,
+                        closestAnchor.getLocalX(), closestAnchor.getLocalY(), closestAnchor.getLocalZ(),
+                        closestAnchor.getLocalQx(), closestAnchor.getLocalQy(), closestAnchor.getLocalQz(), closestAnchor.getLocalQw());
+
+                return originPose;
+            }
+        }
+
+        // If we couldn't compute the origin pose, fall back to the first resolved anchor
+        Pose fallbackPose = resolvedAnchors.get(0).getAnchor().getPose();
+        Timber.w("Falling back to first resolved anchor as origin for %s with pose: %s", purpose, fallbackPose);
+        return fallbackPose;
+    }
+
+    /**
      * Loads waypoints from the current map after anchors are resolved.
      */
     private void loadWaypoints() {
@@ -1299,20 +1522,92 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
             resolvedAnchorsMap.put(resolvedAnchor.getCloudAnchorId(), resolvedAnchor.getAnchor());
         }
 
+        // Find the origin anchor (the one with local coordinates 0,0,0)
+        Pose originPose = null;
+        String originAnchorId = null;
+
+        // First, find the anchor with local coordinates (0,0,0) in the Map object
+        if (currentMap != null && currentMap.getAnchors() != null) {
+            for (Map.Anchor mapAnchor : currentMap.getAnchors()) {
+                if (mapAnchor.getLocalX() == 0 && mapAnchor.getLocalY() == 0 && mapAnchor.getLocalZ() == 0) {
+                    originAnchorId = mapAnchor.getCloudAnchorId();
+                    Timber.d("Found origin anchor with ID: %s for waypoint loading", originAnchorId);
+                    break;
+                }
+            }
+        }
+
+        // If we found the origin anchor ID, get its resolved anchor and pose
+        if (originAnchorId != null) {
+            MapResolvingManager.ResolvedAnchor resolvedOriginAnchor =
+                    mapResolvingManager.getResolvedAnchor(originAnchorId);
+
+            if (resolvedOriginAnchor != null) {
+                originPose = resolvedOriginAnchor.getAnchor().getPose();
+                Timber.d("Using origin anchor (ID: %s) for waypoint local coordinate system with pose: %s",
+                        originAnchorId, originPose);
+            } else {
+                Timber.w("Origin anchor (ID: %s) was not successfully resolved for waypoint loading", originAnchorId);
+            }
+        }
+
+        // If we couldn't find the origin anchor or it wasn't resolved, compute it from the closest anchor
+        if (originPose == null) {
+            originPose = computeOriginPoseFromClosestAnchor("waypoint loading");
+        }
+
         // First pass: Create all waypoints
         HashMap<String, Waypoint> createdWaypoints = new HashMap<>();
         for (WaypointData waypointData : currentMap.getWaypoints()) {
             String referenceAnchorId = waypointData.getReferenceAnchorId();
             Anchor referenceAnchor = resolvedAnchorsMap.get(referenceAnchorId);
 
-            if (referenceAnchor != null) {
+            // Determine which method to use for positioning the waypoint
+            boolean useLocalCoordinates = false;
+            Pose worldPose = null;
+
+            // Check if we have local coordinates and an origin pose
+            if (waypointData.getLocalTranslation() != null &&
+                waypointData.getLocalTranslation().size() == 3 &&
+                originPose != null) {
+
+                try {
+                    // Convert local coordinates to a pose
+                    float[] localTranslation = new float[3];
+                    for (int i = 0; i < 3; i++) {
+                        localTranslation[i] = waypointData.getLocalTranslation().get(i);
+                    }
+
+                    // Create a pose with the local translation and identity rotation
+                    Pose localPose = new Pose(localTranslation, new float[]{0, 0, 0, 1});
+
+                    // Transform from local to world coordinates
+                    worldPose = originPose.compose(localPose);
+                    useLocalCoordinates = true;
+
+                    Timber.d("Using local coordinates for waypoint %s: [%f, %f, %f]",
+                            waypointData.getId(),
+                            localTranslation[0], localTranslation[1], localTranslation[2]);
+                } catch (Exception e) {
+                    Timber.e(e, "Error using local coordinates for waypoint %s", waypointData.getId());
+                    useLocalCoordinates = false;
+                }
+            }
+
+            // Fall back to reference anchor method if local coordinates aren't available or failed
+            if (!useLocalCoordinates && referenceAnchor != null) {
                 // Create the relative pose
                 Pose relativePose = waypointData.createRelativePose();
 
                 // Calculate the world pose by composing the anchor pose with the relative pose
                 Pose anchorPose = referenceAnchor.getPose();
-                Pose worldPose = anchorPose.compose(relativePose);
+                worldPose = anchorPose.compose(relativePose);
 
+                Timber.d("Using reference anchor for waypoint %s", waypointData.getId());
+            }
+
+            // Create the waypoint if we have a valid world pose
+            if (worldPose != null) {
                 // Create the waypoint with the original ID
                 Waypoint waypoint = new Waypoint(waypointData.getId(), worldPose, referenceAnchor, referenceAnchorId);
 
@@ -1328,8 +1623,7 @@ public class MapResolvingFragment extends Fragment implements GLSurfaceView.Rend
 
                 Timber.d("Loaded waypoint %s at pose %s", waypointData.getId(), worldPose.toString());
             } else {
-                Timber.w("Reference anchor %s not found for waypoint %s",
-                        referenceAnchorId, waypointData.getId());
+                Timber.w("Could not create waypoint %s - no valid pose available", waypointData.getId());
             }
         }
 

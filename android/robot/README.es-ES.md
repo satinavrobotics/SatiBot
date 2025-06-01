@@ -44,7 +44,7 @@ Aquí puedes verificar los permisos de la aplicación y ajustarlos si es necesar
 
 #### Transmisión de Video
 
-Puedes elegir entre `WebRTC` y `RTSP` para transmitir video a un dispositivo externo. La aplicación controladora del teléfono y el servidor node-js necesitan que esto esté configurado en `WebRTC`. El controlador de Python espera que la transmisión esté configurada en `RTSP`.
+La aplicación utiliza `LiveKit` para transmitir video a dispositivos externos.
 
 #### Conexión Bluetooth
 

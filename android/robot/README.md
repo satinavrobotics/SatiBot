@@ -44,7 +44,7 @@ Here you can check the permissions of the app and adjust them if needed.
 
 #### Video Streaming
 
-You can choose between `WebRTC` and `RTSP` for streaming video to an external device. The phone controller app and node-js server both need this to be set to `WebRTC`. The python controller expects the stream to be set to `RTSP`.
+The app uses `LiveKit` for streaming video to external devices.
 
 #### Bluetooth connection
 
@@ -110,13 +110,7 @@ Simple UI to get robot info and test basic functionality. The **Robot Type** as 
 <img src="../../docs/images/screen_robot_info.gif" alt="Robot Info" width="50%" />
 </p>
 
-### Autopilot
 
-Simple UI for running autopilot models.
-
-<p align="left">
-<img src="../../docs/images/screen_autopilot.jpg" alt="Autopilot" width="50%" />
-</p>
 
 - **Server**: If you have the [web app](../../policy#web-app) for policy training running, you can select it here and send trained autopilot models to the robot.
 - **Model**: Choose a trained model to use for autopilot mode.

@@ -39,12 +39,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.openbot.R;
-import org.openbot.databinding.FragmentModelManagementBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentModelManagementBinding;
 
 import com.satinavrobotics.satibot.googleServices.GoogleServices;
 import com.satinavrobotics.satibot.main.OnItemClickListener;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
+import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
 import com.satinavrobotics.satibot.tflite.Model;
 import com.satinavrobotics.satibot.utils.Constants;
 import com.satinavrobotics.satibot.utils.FileUtils;

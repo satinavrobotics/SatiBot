@@ -64,7 +64,6 @@ public class LocationService extends Service implements SensorEventListener {
 
     private SharedPreferencesManager preferencesManager;
 
-    @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     public final void onCreate() {
         super.onCreate();

@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.env;
+package com.satinavrobotics.satibot.livekit;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -67,5 +67,20 @@ public class TokenManager {
     /** Clear the server address **/
     public void clearServerAddress() {
         sharedPreferences.edit().remove(SERVER_ADDRESS_KEY).apply();
+    }
+
+    /** Get the remaining TTL in seconds **/
+    public long getRemainingTTLSeconds() {
+        if (isTokenExpired()) {
+            return 0;
+        }
+        long expiryTime = sharedPreferences.getLong(EXPIRY_KEY, 0);
+        long remainingMillis = expiryTime - System.currentTimeMillis();
+        return Math.max(0, remainingMillis / 1000);
+    }
+
+    /** Get the expiration time in milliseconds **/
+    public long getExpirationTime() {
+        return sharedPreferences.getLong(EXPIRY_KEY, 0);
     }
 }

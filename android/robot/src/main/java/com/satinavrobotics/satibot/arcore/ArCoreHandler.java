@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.common;
+package com.satinavrobotics.satibot.arcore;
 
 import android.content.Context;
 import android.media.Image;
@@ -36,9 +36,7 @@ import com.satinavrobotics.satibot.mapManagement.MapResolvingManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
-import com.satinavrobotics.satibot.arcore.ArCoreListener;
-import com.satinavrobotics.satibot.arcore.CameraIntrinsics;
-import com.satinavrobotics.satibot.arcore.ImageFrame;
+
 import com.satinavrobotics.satibot.arcore.rendering.DisplayRotationHelper;
 import com.satinavrobotics.satibot.arcore.rendering.ARCoreRenderer;
 import com.satinavrobotics.satibot.arcore.processor.ArCoreProcessor;
@@ -271,20 +269,19 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         }
     }
 
+
+
     public void closeSession() {
+        closeSession(null);
+    }
+
+    public void closeSession(Runnable onComplete) {
         if (session != null) {
             runOnMainThread(() -> {
                 try {
                     // First pause the session
                     pause();
                     mapResolvingManager.clear();
-
-                    // Add a small delay before closing the session to allow camera resources to be released
-                    try {
-                        Thread.sleep(100);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                    }
 
                     // Close the session with error handling
                     if (session != null) {
@@ -301,8 +298,18 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
                     // Catch any other exceptions during the entire close process
                     Timber.e(e, "Exception during ARCore session cleanup");
                     session = null;
+                } finally {
+                    // Always call the completion callback if provided
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
                 }
             });
+        } else {
+            // Session is already null, call completion callback immediately
+            if (onComplete != null) {
+                onComplete.run();
+            }
         }
     }
 

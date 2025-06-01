@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.robot;
+package com.satinavrobotics.satibot.livekit.stream;
 
 import android.content.Context;
 import android.hardware.camera2.CameraAccessException;

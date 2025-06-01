@@ -34,14 +34,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.ByteBuffer;
 
+import timber.log.Timber;
+
 /** Utility class for manipulating images. */
 public class ImageUtils {
   // This value is 2 ^ 18 - 1, and is used to clamp the RGB values before their ranges
   // are normalized to eight bits.
   static final int kMaxChannelValue = 262143;
-
-  @SuppressWarnings("unused")
-  private static final Logger LOGGER = new Logger();
 
   /**
    * Utility method to compute the allocated size in bytes of a YUV420SP image of the given
@@ -66,12 +65,12 @@ public class ImageUtils {
    * @param filename The filename for the bitmap.
    */
   public static void saveBitmap(final Bitmap bitmap, final String root, final String filename) {
-    LOGGER.i("Saving %dx%d bitmap to %s.", bitmap.getWidth(), bitmap.getHeight(), root);
+    Timber.i("Saving %dx%d bitmap to %s.", bitmap.getWidth(), bitmap.getHeight(), root);
     final File myDir = new File(root);
 
     if (!myDir.exists()) {
       if (!myDir.mkdirs()) {
-        LOGGER.i("Make dir failed");
+        Timber.i("Make dir failed");
       }
     }
 
@@ -85,7 +84,7 @@ public class ImageUtils {
       out.flush();
       out.close();
     } catch (final Exception e) {
-      LOGGER.e(e, "Exception!");
+      Timber.e(e, "Exception!");
     }
   }
 
@@ -194,7 +193,7 @@ public class ImageUtils {
 
     if (applyRotation != 0) {
       if (applyRotation % 90 != 0) {
-        LOGGER.w("Rotation of %d % 90 != 0", applyRotation);
+        Timber.w("Rotation of %d % 90 != 0", applyRotation);
       }
 
       // Translate so center of image is at origin.
@@ -268,7 +267,7 @@ public class ImageUtils {
       case ImageFormat.JPEG:
         return jpegImageToBitmap(image);
       default:
-        LOGGER.e("Unsupported image format: %d", image.getFormat());
+        Timber.e("Unsupported image format: %d", image.getFormat());
         return null;
     }
   }

@@ -91,59 +91,17 @@
             android:textColor="@android:color/black" />
 
         <TextView
-            android:id="@+id/voltage_info"
+            android:id="@+id/battery_info"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="5dp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="2dp"
             android:gravity="end"
-            android:text="@string/voltage"
+            android:text="@string/battery_percentage"
             android:textColor="@android:color/black" />
 
-        <TextView
-            android:id="@+id/label_speed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="15dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="2dp"
-            android:gravity="end"
-            android:text="@string/speed"
-            android:textColor="@android:color/black" />
 
-        <TextView
-            android:id="@+id/speed_info"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="5dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="2dp"
-            android:gravity="end"
-            android:text="@string/rpm"
-            android:textColor="@android:color/black" />
-
-        <TextView
-            android:id="@+id/label_sonar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="15dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="2dp"
-            android:gravity="end"
-            android:text="@string/sonar"
-            android:textColor="@android:color/black" />
-
-        <TextView
-            android:id="@+id/sonar_info"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="5dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="2dp"
-            android:gravity="end"
-            android:text="@string/distance"
-            android:textColor="@android:color/black" />
     </LinearLayout>
 
 

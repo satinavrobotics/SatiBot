@@ -32,7 +32,7 @@ public class Waypoint {
         this.pose = pose;
         this.connectedWaypointIds = new ArrayList<>();
         this.referenceAnchorId = referenceAnchorId;
-        
+
         // Calculate the relative pose from the reference anchor
         if (referenceAnchor != null) {
             Pose anchorPose = referenceAnchor.getPose();
@@ -138,5 +138,27 @@ public class Waypoint {
      */
     public Anchor getAnchor() {
         return anchor;
+    }
+
+    /**
+     * Calculates the local coordinates of this waypoint relative to an origin pose.
+     * This is used to store the waypoint's position in the map's local coordinate system.
+     *
+     * @param originPose The origin pose (usually the first anchor's pose)
+     * @return A float array containing the local [x, y, z] coordinates
+     */
+    public float[] calculateLocalCoordinates(Pose originPose) {
+        if (originPose == null) {
+            return new float[] {0, 0, 0};
+        }
+
+        // Calculate the relative pose (transform from origin to waypoint)
+        Pose relativePose = originPose.inverse().compose(pose);
+
+        // Extract the translation component
+        float[] translation = new float[3];
+        relativePose.getTranslation(translation, 0);
+
+        return translation;
     }
 }

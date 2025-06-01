@@ -1,6 +1,8 @@
-package com.satinavrobotics.satibot.robot;
+package com.satinavrobotics.satibot.livekit.stream;
 
 import android.os.Handler;
+
+import com.satinavrobotics.satibot.arcore.ArCoreHandler;
 
 import livekit.org.webrtc.VideoFrame;
 
@@ -119,7 +121,29 @@ public class ArCameraSession implements CameraSession, CameraSession.CreateSessi
 
     public void setArCoreHandler(ArCoreHandler arCoreHandler) {
         this.arCoreHandler = arCoreHandler;
+    }
 
+    /**
+     * Starts the ARCore session if it's not already running.
+     * This is called when switching back to ARCore from another camera source.
+     */
+    public void startArCoreSession() {
+        if (arCoreHandler != null && createSessionCallback != null && eventsCallback != null) {
+            try {
+                // Check if ARCore session is already active
+                if (arCoreHandler.getSession() == null) {
+                    // Resume the ARCore session only if it's not already running
+                    arCoreHandler.resume();
+                }
+                // Mark as running and notify success
+                isRunning = true;
+                createSessionCallback.onDone(this);
+            } catch (Exception e) {
+                // If ARCore fails to start, notify failure
+                android.util.Log.e("ArCameraSession", "Failed to start ARCore session: " + e.getMessage(), e);
+                createSessionCallback.onFailure(FailureType.ERROR, "Failed to start ARCore session: " + e.getMessage());
+            }
+        }
     }
 
     @Override

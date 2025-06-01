@@ -7,11 +7,11 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
-import org.openbot.R;
-import org.openbot.databinding.ItemCategoryBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.ItemCategoryBinding;
 
-import com.satinavrobotics.satibot.model.Category;
-import com.satinavrobotics.satibot.model.SubCategory;
+import com.satinavrobotics.satibot.main.model.Category;
+import com.satinavrobotics.satibot.main.model.SubCategory;
 import com.satinavrobotics.satibot.utils.MarginItemDecoration;
 
 public class CategoryAdapter extends RecyclerView.Adapter<CategoryAdapter.ViewHolder> {

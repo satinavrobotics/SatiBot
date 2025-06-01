@@ -18,9 +18,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
-import org.openbot.databinding.ItemModelBinding;
+import com.satinavrobotics.satibot.databinding.ItemModelBinding;
 
-import com.satinavrobotics.satibot.projects.DownloadFileTask;
+import com.satinavrobotics.satibot.utils.DownloadFileTask;
 import com.satinavrobotics.satibot.tflite.Model;
 import com.satinavrobotics.satibot.utils.FileUtils;
 

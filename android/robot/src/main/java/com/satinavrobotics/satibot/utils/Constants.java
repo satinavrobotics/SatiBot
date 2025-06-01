@@ -21,11 +21,15 @@ public class Constants {
   public static final String PERMISSION_COARSE_LOCATION =
       Manifest.permission.ACCESS_COARSE_LOCATION;
   public static final String PERMISSION_STORAGE = Manifest.permission.WRITE_EXTERNAL_STORAGE;
+  public static final String PERMISSION_READ_MEDIA_IMAGES = "android.permission.READ_MEDIA_IMAGES";
   public static final String PERMISSION_BLUETOOTH = Manifest.permission.BLUETOOTH;
   public static final String PERMISSION_AUDIO = Manifest.permission.RECORD_AUDIO;
 
+  // Define logging permissions based on Android version
   public static final String[] PERMISSIONS_LOGGING =
-      new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION};
+      (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) ?
+          new String[] {PERMISSION_CAMERA, PERMISSION_READ_MEDIA_IMAGES, PERMISSION_LOCATION} :
+          new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION};
   public static final String[] PERMISSIONS_CONTROLLER =
       new String[] {PERMISSION_CAMERA, PERMISSION_AUDIO, PERMISSION_LOCATION};
 

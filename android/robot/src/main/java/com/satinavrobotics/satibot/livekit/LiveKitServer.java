@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.env;
+package com.satinavrobotics.satibot.livekit;
 
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -7,18 +7,25 @@ import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
+import androidx.fragment.app.Fragment;
 
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.gson.JsonObject;
+import com.satinavrobotics.satibot.env.ControllerToBotEventBus;
+import com.satinavrobotics.satibot.env.StatusManager;
 import com.satinavrobotics.satibot.utils.ConnectionUtils;
+import com.satinavrobotics.satibot.utils.Constants;
+import com.satinavrobotics.satibot.utils.PermissionUtils;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Date;
 import java.util.concurrent.Executors;
 
 import io.livekit.android.ConnectOptions;
@@ -33,6 +40,7 @@ import io.livekit.android.room.track.CameraPosition;
 import io.livekit.android.room.track.LocalVideoTrack;
 import io.livekit.android.room.track.LocalVideoTrackOptions;
 import io.livekit.android.room.track.Track;
+import io.livekit.android.room.track.TrackException;
 import io.livekit.android.room.track.TrackPublication;
 import io.livekit.android.room.track.VideoCaptureParameter;
 import kotlin.Result;
@@ -63,6 +71,9 @@ public class LiveKitServer  {
     private boolean connected;
 
     private final StatusManager statusManager;
+
+    // Permission handling
+    private boolean allGranted = false;
 
 
     // Singleton pattern for LiveKitServer
@@ -148,9 +159,10 @@ public class LiveKitServer  {
                     if (!token.equals("not found")) {
                         System.out.println("Token received: " + token);
                         try {
-                            int ttl_seconds = !ttl.equals("not found") ? Integer.parseInt(ttl) : 600_000;
-                            long expiration_time = System.currentTimeMillis() + (ttl_seconds - 60) * 1000L;
-                            tokenManager.saveToken(token, expiration_time); // 10 minutes
+                            int ttl_seconds = !ttl.equals("not found") ? Integer.parseInt(ttl) : 600;
+                            // Subtract 60 seconds as a safety buffer and convert to milliseconds
+                            long ttl_millis = (ttl_seconds - 60) * 1000L;
+                            tokenManager.saveToken(token, ttl_millis);
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -179,6 +191,54 @@ public class LiveKitServer  {
         this.videoRenderer = null;
     }
 
+    public SurfaceViewRenderer setupVideoRenderer(Fragment fragment) {
+        // Clear any existing renderer first
+        if (videoRenderer != null) {
+            try {
+                videoRenderer.release();
+            } catch (Exception ignored) {}
+            videoRenderer = null;
+        }
+
+        SurfaceViewRenderer renderer = new SurfaceViewRenderer(fragment.requireContext());
+        renderer.setMirror(false);
+        renderer.setScalingType(livekit.org.webrtc.RendererCommon.ScalingType.SCALE_ASPECT_FIT);
+
+        if (fragment.getView() != null) {
+            ViewGroup rootView = (ViewGroup) fragment.getView();
+            FrameLayout.LayoutParams layoutParams = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            renderer.setLayoutParams(layoutParams);
+            rootView.addView(renderer, 0);
+        }
+
+        // Let LiveKit handle the initialization through setView
+        setView(renderer);
+        return renderer;
+    }
+
+    public void cleanupVideoRenderer(Fragment fragment, SurfaceViewRenderer videoRenderer) {
+        if (videoRenderer != null) {
+            // Clear the view reference first to prevent LiveKit from using it
+            if (this.videoRenderer == videoRenderer) {
+                clearView();
+            }
+
+            ViewGroup parent = (ViewGroup) videoRenderer.getParent();
+            if (parent != null) {
+                parent.removeView(videoRenderer);
+            }
+
+            try {
+                videoRenderer.release();
+            } catch (Exception ignored) {}
+        }
+    }
+
+
+
     public LocalVideoTrackOptions createVideoTrackOptions() {
         int width = 640;
         int height = 320;
@@ -201,6 +261,29 @@ public class LiveKitServer  {
     public boolean hasRequiredPermissions() {
         return ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
             && ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public ActivityResultLauncher<String[]> createPermissionLauncher(Fragment fragment) {
+        return fragment.registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                result -> {
+                    allGranted = true;
+                    result.forEach((permission, granted) -> allGranted = allGranted && granted);
+
+                    if (allGranted) {
+                        connect();
+                    } else {
+                        PermissionUtils.showControllerPermissionsToast(fragment.requireActivity());
+                    }
+                });
+    }
+
+    public void initLiveKitServer(Fragment fragment, ActivityResultLauncher<String[]> permissionLauncher) {
+        if (!PermissionUtils.hasControllerPermissions(fragment.requireActivity())) {
+            permissionLauncher.launch(Constants.PERMISSIONS_CONTROLLER);
+        } else {
+            connect();
+        }
     }
 
     /**
@@ -524,39 +607,53 @@ public class LiveKitServer  {
         }
     }
 
-    /**
-     * Stops streaming (disables camera and microphone) but keeps the room connection.
-     * Also unregisters manual control RPC methods.
-     */
     public void stopStreaming() {
         if (room == null || room.getState() != Room.State.CONNECTED) {
             return;
         }
-
         try {
             LocalParticipant localParticipant = room.getLocalParticipant();
             localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
             localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
-
-            // Unregister manual control RPC methods when stopping streaming
             unregisterManualControlRpcMethods(localParticipant);
-        } catch (Exception ignored) {}
+        } catch (TrackException.PublishException e) {
+            e.printStackTrace();
+        }
+
     }
 
     /**
      * Disconnects from the LiveKit room.
      */
     public void disconnect() {
-        //room.disconnect();
-        LocalParticipant localParticipant = room.getLocalParticipant();
-        try {
-            localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
-            localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        // Run the disconnection on a separate thread to avoid blocking the main thread
+        new Thread(() -> {
+            try {
+                Timber.d("Disconnecting from LiveKit room...");
 
-        setConnected(false);
+                // Disable camera and microphone first
+                LocalParticipant localParticipant = room.getLocalParticipant();
+                if (localParticipant != null) {
+                    try {
+                        localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
+                        localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
+                    } catch (Exception e) {
+                        Timber.e(e, "Error disabling camera/microphone during disconnect");
+                    }
+                }
+
+                // Actually disconnect from the room
+                if (room != null && room.getState() == Room.State.CONNECTED) {
+                    room.disconnect();
+                    Timber.d("Room disconnected successfully");
+                }
+
+                setConnected(false);
+            } catch (Exception e) {
+                Timber.e(e, "Error during disconnect");
+                setConnected(false);
+            }
+        }).start();
     }
 
     public boolean isConnected() {
@@ -633,6 +730,29 @@ public class LiveKitServer  {
         return "Unknown";
     }
 
+    /**
+     * Gets the remaining TTL of the token in seconds.
+     *
+     * @return remaining TTL in seconds, or 0 if token is expired or not available.
+     */
+    public long getTokenTTLSeconds() {
+        try {
+            return tokenManager != null ? tokenManager.getRemainingTTLSeconds() : 0;
+        } catch (Exception e) {
+            Timber.e(e, "Error getting token TTL");
+            return 0;
+        }
+    }
+
+    /**
+     * Requests a new token from the server.
+     * This is a public wrapper around the existing pollForTokenAsync method.
+     */
+    public void refreshToken() {
+        Timber.d("Token refresh requested");
+        pollForTokenAsync();
+    }
+
 
 
     public String getCameraIdsJson() {
@@ -680,6 +800,19 @@ public class LiveKitServer  {
     }
 
 
+
+    /**
+     * Reinitializes the LiveKitServer singleton by disconnecting, cleaning up, and creating a new instance.
+     */
+    public static synchronized void reinitialize(Context context) {
+        if (instance != null) {
+            try {
+                instance.disconnect();
+            } catch (Exception ignored) {}
+            instance = null;
+        }
+        getInstance(context);
+    }
 
     public static class BaseContinuation implements Continuation<Unit> {
         @Override

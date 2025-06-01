@@ -26,8 +26,8 @@ import com.ficat.easypermissions.RequestExecutor;
 import com.ficat.easypermissions.bean.Permission;
 import java.util.List;
 
-import org.openbot.R;
-import org.openbot.databinding.FragmentBluetoothBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentBluetoothBinding;
 
 import com.satinavrobotics.satibot.SatiBotApplication;
 import com.satinavrobotics.satibot.vehicle.Vehicle;
@@ -64,12 +64,20 @@ public class BluetoothFragment extends Fragment {
         new CommonRecyclerViewAdapter.OnItemClickListener() {
           @Override
           public void onItemClick(View itemView, int position) {
+            // Add bounds checking to prevent IndexOutOfBoundsException
+            List<BleDevice> deviceList = vehicle.getDeviceList();
+            if (deviceList == null || position < 0 || position >= deviceList.size()) {
+              // Device list is empty or position is invalid, ignore the click
+              return;
+            }
+
             vehicle.stopScan();
             ProgressBar pb = getView().findViewById(R.id.progress_bar);
             TextView tv = getView().findViewById(R.id.btn_refresh);
             pb.setVisibility(View.INVISIBLE);
             tv.setVisibility(View.VISIBLE);
-            BleDevice device = vehicle.getDeviceList().get(position);
+
+            BleDevice device = deviceList.get(position);
             if (vehicle.getBleDevice() == null
                 || vehicle.getBleDevice().address.equals(device.address)) {
               vehicle.setBleDevice(device);

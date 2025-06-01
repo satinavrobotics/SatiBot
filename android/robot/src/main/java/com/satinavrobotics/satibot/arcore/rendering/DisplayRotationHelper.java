@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.pointGoalNavigation.rendering;
+package com.satinavrobotics.satibot.arcore.rendering;
 
 import android.content.Context;
 import android.hardware.display.DisplayManager;

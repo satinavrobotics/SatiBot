@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.projects;
+package com.satinavrobotics.satibot.utils;
 
 import android.annotation.SuppressLint;
 import android.content.Context;

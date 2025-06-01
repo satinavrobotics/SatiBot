@@ -1,12 +1,12 @@
 package com.satinavrobotics.satibot.utils;
 
-import static com.satibot.utils.Constants.PERMISSION_AUDIO;
-import static com.satibot.utils.Constants.PERMISSION_CAMERA;
-import static com.satibot.utils.Constants.PERMISSION_LOCATION;
-import static com.satibot.utils.Constants.PERMISSION_STORAGE;
-import static com.satibot.utils.Constants.REQUEST_CAMERA_PERMISSION;
-import static com.satibot.utils.Constants.REQUEST_CONTROLLER_PERMISSIONS;
-import static com.satibot.utils.Constants.REQUEST_LOGGING_PERMISSIONS;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_AUDIO;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_CAMERA;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_LOCATION;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_STORAGE;
+import static com.satinavrobotics.satibot.utils.Constants.REQUEST_CAMERA_PERMISSION;
+import static com.satinavrobotics.satibot.utils.Constants.REQUEST_CONTROLLER_PERMISSIONS;
+import static com.satinavrobotics.satibot.utils.Constants.REQUEST_LOGGING_PERMISSIONS;
 
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
@@ -20,7 +20,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.preference.PreferenceManager;
 
-import org.openbot.R;
+import com.satinavrobotics.satibot.R;
 
 public class PermissionUtils {
 
@@ -59,8 +59,15 @@ public class PermissionUtils {
   }
 
   public static boolean hasStoragePermission(Activity activity) {
-    return ContextCompat.checkSelfPermission(activity, PERMISSION_STORAGE)
-        == PackageManager.PERMISSION_GRANTED;
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 13+, check READ_MEDIA_IMAGES permission
+      return ContextCompat.checkSelfPermission(activity, Constants.PERMISSION_READ_MEDIA_IMAGES)
+          == PackageManager.PERMISSION_GRANTED;
+    } else {
+      // For older Android versions, check WRITE_EXTERNAL_STORAGE permission
+      return ContextCompat.checkSelfPermission(activity, PERMISSION_STORAGE)
+          == PackageManager.PERMISSION_GRANTED;
+    }
   }
 
   public static boolean hasLocationPermission(Activity activity) {
@@ -74,8 +81,15 @@ public class PermissionUtils {
   }
 
   public static boolean hasLoggingPermissions(Activity activity) {
-    return hasPermissions(
-        activity, new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION});
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 13+, check READ_MEDIA_IMAGES permission
+      return hasPermissions(
+          activity, new String[] {PERMISSION_CAMERA, Constants.PERMISSION_READ_MEDIA_IMAGES, PERMISSION_LOCATION});
+    } else {
+      // For older Android versions, check WRITE_EXTERNAL_STORAGE permission
+      return hasPermissions(
+          activity, new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION});
+    }
   }
 
   public static boolean hasControllerPermissions(Activity activity) {
@@ -89,10 +103,19 @@ public class PermissionUtils {
   }
 
   public static void requestStoragePermission(Activity activity) {
-    requestPermissions(
-        activity,
-        new String[] {Constants.PERMISSION_STORAGE},
-        Constants.REQUEST_STORAGE_PERMISSION);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 13+, request READ_MEDIA_IMAGES permission
+      requestPermissions(
+          activity,
+          new String[] {Constants.PERMISSION_READ_MEDIA_IMAGES},
+          Constants.REQUEST_STORAGE_PERMISSION);
+    } else {
+      // For older Android versions, request WRITE_EXTERNAL_STORAGE permission
+      requestPermissions(
+          activity,
+          new String[] {Constants.PERMISSION_STORAGE},
+          Constants.REQUEST_STORAGE_PERMISSION);
+    }
   }
 
   public static void requestLocationPermission(Activity activity) {
@@ -106,10 +129,19 @@ public class PermissionUtils {
   }
 
   public static void requestLoggingPermissions(Activity activity) {
-    requestPermissions(
-        activity,
-        new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION},
-        REQUEST_LOGGING_PERMISSIONS);
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 13+, request READ_MEDIA_IMAGES permission
+      requestPermissions(
+          activity,
+          new String[] {PERMISSION_CAMERA, Constants.PERMISSION_READ_MEDIA_IMAGES, PERMISSION_LOCATION},
+          REQUEST_LOGGING_PERMISSIONS);
+    } else {
+      // For older Android versions, request WRITE_EXTERNAL_STORAGE permission
+      requestPermissions(
+          activity,
+          new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE, PERMISSION_LOCATION},
+          REQUEST_LOGGING_PERMISSIONS);
+    }
   }
 
   public static void requestControllerPermissions(Activity activity) {
@@ -127,10 +159,19 @@ public class PermissionUtils {
   }
 
   public static boolean checkLoggingPermissions(int[] grantResults) {
-    return grantResults.length > 2
-        && grantResults[0] == PackageManager.PERMISSION_GRANTED
-        && grantResults[1] == PackageManager.PERMISSION_GRANTED
-        && grantResults[2] == PackageManager.PERMISSION_GRANTED;
+    // We always expect 3 permissions: camera, storage (or media images), and location
+    if (grantResults.length < 3) {
+      return false;
+    }
+
+    // Check that all permissions are granted
+    for (int result : grantResults) {
+      if (result != PackageManager.PERMISSION_GRANTED) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   public static void showControllerPermissionsToast(Activity activity) {
@@ -186,17 +227,49 @@ public class PermissionUtils {
         .show();
   }
 
+  // Keep track of the current toast to avoid queue overflow
+  private static Toast currentToast;
+
+  /**
+   * Shows a toast message, canceling any previous toast to prevent queue overflow
+   * @param context The context to use
+   * @param message The message to display
+   */
+  private static void showSingleToast(Context context, String message) {
+    if (currentToast != null) {
+      currentToast.cancel();
+    }
+    currentToast = Toast.makeText(context, message, Toast.LENGTH_LONG);
+    currentToast.show();
+  }
+
   public static void showLoggingPermissionsToast(Activity activity) {
+    // Instead of showing multiple toasts, show a single combined message
+    StringBuilder message = new StringBuilder("Missing permissions: ");
+    boolean hasMissingPermissions = false;
+
     if (shouldShowRational(activity, Constants.PERMISSION_LOCATION)) {
-      showLocationPermissionLoggingToast(activity);
+      message.append("Location, ");
+      hasMissingPermissions = true;
     }
 
     if (shouldShowRational(activity, Constants.PERMISSION_CAMERA)) {
-      showCameraPermissionLoggingToast(activity);
+      message.append("Camera, ");
+      hasMissingPermissions = true;
     }
 
-    if (shouldShowRational(activity, Constants.PERMISSION_STORAGE)) {
-      showStoragePermissionLoggingToast(activity);
+    if (shouldShowRational(activity, Constants.PERMISSION_STORAGE) ||
+        (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+         shouldShowRational(activity, Constants.PERMISSION_READ_MEDIA_IMAGES))) {
+      message.append("Storage, ");
+      hasMissingPermissions = true;
+    }
+
+    if (hasMissingPermissions) {
+      // Remove the trailing comma and space
+      message.setLength(message.length() - 2);
+      message.append("\nPlease grant all permissions for logging to work.");
+      showSingleToast(activity, message.toString());
     }
   }
 
@@ -222,33 +295,27 @@ public class PermissionUtils {
   }
 
   public static void showPermissionsSettingsToast(Activity activity, String permission) {
-    Toast.makeText(
+    showSingleToast(
             activity.getApplicationContext(),
             permission
                 + " "
-                + activity.getResources().getString(R.string.permission_reason_settings),
-            Toast.LENGTH_LONG)
-        .show();
+                + activity.getResources().getString(R.string.permission_reason_settings));
   }
 
   public static void showPermissionsModelManagementToast(Activity activity, String permission) {
-    Toast.makeText(
+    showSingleToast(
             activity.getApplicationContext(),
             permission
                 + " "
-                + activity.getResources().getString(R.string.permission_reason_model_from_phone),
-            Toast.LENGTH_LONG)
-        .show();
+                + activity.getResources().getString(R.string.permission_reason_model_from_phone));
   }
 
   public static void showPermissionsLoggingToast(Activity activity, String permission) {
-    Toast.makeText(
+    showSingleToast(
             activity.getApplicationContext(),
             permission
                 + " "
-                + activity.getResources().getString(R.string.permission_reason_logging),
-            Toast.LENGTH_LONG)
-        .show();
+                + activity.getResources().getString(R.string.permission_reason_logging));
   }
 
   public static void showStoragePermissionSettingsToast(Activity activity) {
@@ -277,18 +344,32 @@ public class PermissionUtils {
   }
 
   public static void showStoragePermissionLoggingToast(Activity activity) {
-    showPermissionsLoggingToast(
-        activity, activity.getResources().getString(R.string.storage_permission_denied));
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+      // For Android 13+, show message about media images permission
+      showSingleToast(
+              activity.getApplicationContext(),
+              "Media images permission is required for logging. Please grant this permission.");
+    } else {
+      // For older Android versions, show standard storage permission message
+      showSingleToast(
+          activity.getApplicationContext(),
+          activity.getResources().getString(R.string.storage_permission_denied) +
+          " " + activity.getResources().getString(R.string.permission_reason_logging));
+    }
   }
 
   public static void showCameraPermissionLoggingToast(Activity activity) {
-    showPermissionsLoggingToast(
-        activity, activity.getResources().getString(R.string.camera_permission_denied));
+    showSingleToast(
+        activity.getApplicationContext(),
+        activity.getResources().getString(R.string.camera_permission_denied) +
+        " " + activity.getResources().getString(R.string.permission_reason_logging));
   }
 
   public static void showLocationPermissionLoggingToast(Activity activity) {
-    showPermissionsLoggingToast(
-        activity, activity.getResources().getString(R.string.location_permission_denied));
+    showSingleToast(
+        activity.getApplicationContext(),
+        activity.getResources().getString(R.string.location_permission_denied) +
+        " " + activity.getResources().getString(R.string.permission_reason_logging));
   }
 
   public static boolean getBluetoothStatus() {

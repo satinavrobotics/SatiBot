@@ -38,6 +38,11 @@ import timber.log.Timber;
 
 /**
  * Manages the dense mapping process, including recording and saving depth, color, pointcloud, and pose data.
+ * All data is saved in the local coordinate system relative to the origin pose.
+ * The coordinate system convention is still ARCore (OpenGL):
+ * - +X points to the right
+ * - +Y points upward
+ * - −Z points forward (in the view direction)
  */
 public class DenseMappingManager {
     private static final String TAG = "DenseMappingManager";
@@ -68,6 +73,9 @@ public class DenseMappingManager {
     // Store the latest frame for camera intrinsics
     private Frame latestFrame;
 
+    // Origin pose for local coordinate system
+    private Pose originPose;
+
     // Threading
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -92,12 +100,21 @@ public class DenseMappingManager {
      * @param mapName Name of the map being densely mapped
      * @param googleServices Google services for Drive upload
      * @param callback Callback for mapping events
+     * @param originPose The origin pose for local coordinate system (can be null)
      */
     public DenseMappingManager(Context context, String mapId, String mapName,
-                               GoogleServices googleServices, DenseMappingCallback callback) {
+                               GoogleServices googleServices, DenseMappingCallback callback,
+                               Pose originPose) {
         // Data storage
         this.googleServices = googleServices;
         this.callback = callback;
+        this.originPose = originPose;
+
+        if (originPose != null) {
+            Timber.d("Using origin pose for local coordinate system: %s", originPose);
+        } else {
+            Timber.d("No origin pose provided, local coordinates will be in world space");
+        }
 
         // Create base recording folder
         String baseFolder = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
@@ -120,7 +137,8 @@ public class DenseMappingManager {
 
     /**
      * Creates the necessary subfolders for storing mapping data.
-     * Note: Data will be stored in ARCore's coordinate system, not converted to COLMAP's system.
+     * Note: Data will be stored in the local coordinate system relative to the origin pose,
+     * using ARCore's coordinate system convention.
      */
     private void createSubfolders() {
         File baseDir = new File(recordingFolder);
@@ -400,6 +418,8 @@ public class DenseMappingManager {
 
     /**
      * Saves the point cloud data directly from the ARCore frame.
+     * If an origin pose is available, saves points in the local coordinate system.
+     * Otherwise, saves points in the world coordinate system.
      *
      * @param pointCloud The ARCore point cloud
      * @param cameraPose The camera pose
@@ -416,16 +436,30 @@ public class DenseMappingManager {
                 return;
             }
 
-            // Create a list to store transformed points
-            List<float[]> worldPoints = new ArrayList<>();
+            boolean hasLocalCoordinates = (originPose != null);
+
+            // If we don't have an origin pose, log a warning and return
+            if (!hasLocalCoordinates) {
+                Timber.w("No origin pose available for local coordinate transformation, skipping point cloud save");
+                return;
+            }
+
+            // Create list to store transformed points
+            List<float[]> localPoints = new ArrayList<>();
 
             // Camera-to-world transform (column-major OpenGL)
             float[] cameraToWorld = new float[16];
             cameraPose.toMatrix(cameraToWorld, 0);
 
+            // Origin-to-camera transform for local coordinates
+            float[] originToCamera = new float[16];
+            // Calculate the relative pose (transform from origin to camera)
+            Pose relativePose = originPose.inverse().compose(cameraPose);
+            relativePose.toMatrix(originToCamera, 0);
+
             // Process each point
             float[] point = new float[4];
-            float[] worldPoint = new float[4];
+            float[] localPoint = new float[4];
 
             for (int i = 0; i < numPoints; i++) {
                 // Read point (x, y, z, confidence)
@@ -441,20 +475,23 @@ public class DenseMappingManager {
                     continue;
                 }
 
-                // Transform to world space in ARCore coordinate system
-                Matrix.multiplyMV(worldPoint, 0, cameraToWorld, 0, point, 0);
+                // Transform directly from camera space to local space
+                Matrix.multiplyMV(localPoint, 0, originToCamera, 0, point, 0);
 
-                // Add point with position and confidence in ARCore coordinate system
-                worldPoints.add(new float[] {
-                    worldPoint[0],  // x
-                    worldPoint[1],  // y
-                    worldPoint[2],  // z
+                // Create the local point with the same confidence
+                float[] localPointWithConfidence = new float[] {
+                    localPoint[0],  // x
+                    localPoint[1],  // y
+                    localPoint[2],  // z
                     confidence      // confidence
-                });
+                };
+
+                // Add to local points list
+                localPoints.add(localPointWithConfidence);
             }
 
-            // Store points in memory
-            allPointClouds.add(worldPoints);
+            // Store local points in memory (for compatibility with existing code)
+            allPointClouds.add(localPoints);
 
             // Make sure the parent directory exists
             File file = new File(pointCloudFile);
@@ -463,8 +500,8 @@ public class DenseMappingManager {
                 parentDir.mkdirs();
             }
 
-            // Append to the single point cloud file
-            appendToPointCloudFile(worldPoints, frameNumber);
+            // Append to the point cloud file (now containing local coordinates)
+            appendToPointCloudFile(localPoints, frameNumber);
 
         } catch (Exception e) {
             Timber.e(e, "Error saving point cloud data: %s", e.getMessage());
@@ -475,15 +512,16 @@ public class DenseMappingManager {
      * Appends point cloud data to the single text file using COLMAP format.
      * COLMAP format: POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)
      *
-     * Note: Points are in ARCore (OpenGL) coordinate system:
+     * Note: Points are in the local coordinate system relative to the origin pose.
+     * The coordinate system convention is still ARCore (OpenGL):
      * - +X points to the right
      * - +Y points upward
      * - −Z points forward (in the view direction)
      *
-     * @param worldPoints List of points to append (in ARCore coordinate system)
+     * @param points List of points to append (in local coordinate system)
      * @param frameNumber The current frame number
      */
-    private void appendToPointCloudFile(List<float[]> worldPoints, int frameNumber) {
+    private void appendToPointCloudFile(List<float[]> points, int frameNumber) {
         try {
             File file = new File(pointCloudFile);
             boolean fileExists = file.exists();
@@ -498,6 +536,7 @@ public class DenseMappingManager {
                 // Write header if file is new
                 if (!fileExists) {
                     writer.write("# 3D point list with one line of data per point:\n");
+                    writer.write("# Points are in local coordinate system relative to the origin pose\n");
                     writer.write("# POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)\n");
                 }
 
@@ -505,8 +544,8 @@ public class DenseMappingManager {
                 int basePointId = frameNumber * 1000000;
 
                 // Write each point in COLMAP format
-                for (int i = 0; i < worldPoints.size(); i++) {
-                    float[] point = worldPoints.get(i);
+                for (int i = 0; i < points.size(); i++) {
+                    float[] point = points.get(i);
                     int pointId = basePointId + i;
 
                     // Extract position and confidence
@@ -543,10 +582,14 @@ public class DenseMappingManager {
                     ));
                 }
             }
+
+            Timber.d("Saved %d points to %s in local coordinate system", points.size(), pointCloudFile);
         } catch (IOException e) {
             Timber.e(e, "Error appending to point cloud file: %s", e.getMessage());
         }
     }
+
+
 
 
 
@@ -555,7 +598,8 @@ public class DenseMappingManager {
      * Format: IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
      *         POINTS2D[] as (X, Y, POINT3D_ID)
      *
-     * Note: Poses are in ARCore (OpenGL) coordinate system:
+     * Note: Poses are saved in the local coordinate system relative to the origin pose.
+     * The coordinate system convention is still ARCore (OpenGL):
      * - +X points to the right
      * - +Y points upward
      * - −Z points forward (in the view direction)
@@ -567,6 +611,12 @@ public class DenseMappingManager {
             // First, save the camera intrinsics
             saveCameraData(frame);
 
+            // Check if we have an origin pose
+            if (originPose == null) {
+                Timber.w("No origin pose available for local coordinate transformation, skipping pose data save");
+                return;
+            }
+
             // Then save the image poses
             File file = new File(imagesFile);
             boolean fileExists = file.exists();
@@ -577,41 +627,52 @@ public class DenseMappingManager {
                 parentDir.mkdirs();
             }
 
-            try (FileWriter writer = new FileWriter(file)) {
-                // Write header
-                writer.write("# Image list with two lines of data per image:\n");
-                writer.write("#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n");
-                writer.write("#   POINTS2D[] as (X, Y, POINT3D_ID)\n");
-                writer.write(String.format("# Number of images: %d\n", poseDataList.size()));
-
-                // Write each pose
-                for (PoseData poseData : poseDataList) {
-                    int imageId = poseData.frameNumber;
-                    float[] rotation = poseData.rotation;
-                    float[] translation = poseData.translation;
-
-                    // COLMAP format: IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
-                    // Note: ARCore quaternion is [x, y, z, w] but COLMAP expects [w, x, y, z]
-                    writer.write(String.format(Locale.US,
-                        "%d %.9f %.9f %.9f %.9f %.9f %.9f %.9f 1 frame_%d.jpg\n",
-                        imageId,
-                        rotation[3],  // QW (ARCore stores as [x,y,z,w])
-                        rotation[0],  // QX
-                        rotation[1],  // QY
-                        rotation[2],  // QZ
-                        translation[0], // TX
-                        translation[1], // TY
-                        translation[2], // TZ
-                        imageId
-                    ));
-
-                    // Add placeholder keypoints with "0 0 -1" as requested
-                    // This indicates a keypoint at (0,0) with no associated 3D point
-                    writer.write("0 0 -1\n");
+            // Count how many poses have local coordinates
+            int validPoseCount = 0;
+            for (PoseData poseData : poseDataList) {
+                if (poseData.hasLocalCoordinates) {
+                    validPoseCount++;
                 }
             }
 
-            Timber.d("Saved pose data to %s in COLMAP format", imagesFile);
+            try (FileWriter writer = new FileWriter(file)) {
+                // Write header
+                writer.write("# Image list with two lines of data per image:\n");
+                writer.write("# Poses are in local coordinate system relative to the origin pose\n");
+                writer.write("#   IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME\n");
+                writer.write("#   POINTS2D[] as (X, Y, POINT3D_ID)\n");
+                writer.write(String.format("# Number of images: %d\n", validPoseCount));
+
+                // Write each local pose
+                for (PoseData poseData : poseDataList) {
+                    if (poseData.hasLocalCoordinates) {
+                        int imageId = poseData.frameNumber;
+                        float[] localRotation = poseData.localRotation;
+                        float[] localTranslation = poseData.localTranslation;
+
+                        // COLMAP format: IMAGE_ID, QW, QX, QY, QZ, TX, TY, TZ, CAMERA_ID, NAME
+                        // Note: ARCore quaternion is [x, y, z, w] but COLMAP expects [w, x, y, z]
+                        writer.write(String.format(Locale.US,
+                            "%d %.9f %.9f %.9f %.9f %.9f %.9f %.9f 1 frame_%d.jpg\n",
+                            imageId,
+                            localRotation[3],  // QW (ARCore stores as [x,y,z,w])
+                            localRotation[0],  // QX
+                            localRotation[1],  // QY
+                            localRotation[2],  // QZ
+                            localTranslation[0], // TX
+                            localTranslation[1], // TY
+                            localTranslation[2], // TZ
+                            imageId
+                        ));
+
+                        // Add placeholder keypoints with "0 0 -1" as requested
+                        // This indicates a keypoint at (0,0) with no associated 3D point
+                        writer.write("0 0 -1\n");
+                    }
+                }
+            }
+
+            Timber.d("Saved %d local pose data entries to %s in COLMAP format", validPoseCount, imagesFile);
 
         } catch (IOException e) {
             Timber.e(e, "Error saving pose data in COLMAP format: %s", e.getMessage());
@@ -702,10 +763,13 @@ public class DenseMappingManager {
     /**
      * Class to store pose data for each frame.
      */
-    private static class PoseData {
+    private class PoseData {
         private final int frameNumber;
         private final float[] translation;
         private final float[] rotation;
+        private final float[] localTranslation;
+        private final float[] localRotation;
+        private final boolean hasLocalCoordinates;
 
         public PoseData(int frameNumber, Pose pose) {
             this.frameNumber = frameNumber;
@@ -717,6 +781,32 @@ public class DenseMappingManager {
             // Get rotation quaternion (x, y, z, w) directly from ARCore pose
             this.rotation = new float[4];
             pose.getRotationQuaternion(this.rotation, 0);
+
+            // Calculate local coordinates if we have an origin pose
+            if (originPose != null) {
+                // Calculate the relative pose (transform from origin to camera)
+                Pose relativePose = originPose.inverse().compose(pose);
+
+                // Extract local translation
+                this.localTranslation = new float[3];
+                relativePose.getTranslation(this.localTranslation, 0);
+
+                // Extract local rotation
+                this.localRotation = new float[4];
+                relativePose.getRotationQuaternion(this.localRotation, 0);
+
+                this.hasLocalCoordinates = true;
+
+                Timber.d("Frame %d local coordinates: translation=[%.3f, %.3f, %.3f], rotation=[%.3f, %.3f, %.3f, %.3f]",
+                        frameNumber,
+                        localTranslation[0], localTranslation[1], localTranslation[2],
+                        localRotation[0], localRotation[1], localRotation[2], localRotation[3]);
+            } else {
+                // No local coordinates available
+                this.localTranslation = new float[3];
+                this.localRotation = new float[4];
+                this.hasLocalCoordinates = false;
+            }
         }
     }
 

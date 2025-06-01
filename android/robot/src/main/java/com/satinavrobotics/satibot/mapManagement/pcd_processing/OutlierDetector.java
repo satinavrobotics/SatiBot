@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.mapManagement;
+package com.satinavrobotics.satibot.mapManagement.pcd_processing;
 
 import android.util.Log;
 import java.util.ArrayList;

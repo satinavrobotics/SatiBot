@@ -14,6 +14,12 @@
     <color name="yellow">#FFD966</color>
     <color name="red">#E06666</color>
     <color name="white_text">#ffffff</color>
+    <color name="white">#ffffff</color>
     <color name="black_text">#292929</color>
     <color name="blue_buttons">#0071C5</color>
+    <color name="cardBackground">#5A5A5A</color>
+
+    <!-- Game-like control colors -->
+    <color name="dark_blue_900">#1A237E</color>
+    <color name="light_blue_400">#4FC3F7</color>
 </resources>

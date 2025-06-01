@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.common;
+package com.satinavrobotics.satibot.robot;
 
 import android.os.Bundle;
 import android.os.Handler;
@@ -198,7 +198,7 @@ public abstract class ControlsFragment extends Fragment  {
                   break;
                 case 'v':
                   if (FormatUtils.isNumeric(body)) {
-                    vehicle.setBatteryVoltage(Float.parseFloat(body));
+                    vehicle.setBatteryPercentage(Float.parseFloat(body));
                   }
                   break;
                 case 's':

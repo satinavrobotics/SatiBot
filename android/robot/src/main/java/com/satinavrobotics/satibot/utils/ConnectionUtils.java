@@ -1,5 +1,8 @@
 package com.satinavrobotics.satibot.utils;
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.util.Pair;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -36,7 +39,6 @@ public class ConnectionUtils {
   public static JSONObject getStatus(
       boolean loggingEnabled,
       boolean networkEnabled,
-      String driveMode,
       int indicator) {
     JSONObject status = new JSONObject();
     try {
@@ -44,7 +46,6 @@ public class ConnectionUtils {
 
       statusValue.put("LOGS", loggingEnabled);
       statusValue.put("NETWORK", networkEnabled);
-      statusValue.put("DRIVE_MODE", driveMode);
 
       // Possibly can only send the value of the indicator here, but this makes it clearer.
       // Also, the controller need not have to know implementation details.
@@ -102,5 +103,25 @@ public class ConnectionUtils {
     } catch (Exception ignored) {
     } // for now eat exceptions
     return "";
+  }
+
+  /**
+   * Checks if the device has an active internet connection.
+   * @param context The application context
+   * @return true if internet connection is available, false otherwise
+   */
+  public static boolean isInternetAvailable(Context context) {
+    try {
+      ConnectivityManager connectivityManager =
+          (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
+      if (connectivityManager == null) {
+        return false;
+      }
+
+      NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+      return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+    } catch (Exception e) {
+      return false;
+    }
   }
 }

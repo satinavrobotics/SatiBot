@@ -108,7 +108,13 @@ public class BluetoothManager {
   }
 
   public void toggleConnection(int position, BleDevice device) {
-    if (bleDevice.connecting) return;
+    if (bleDevice != null && bleDevice.connecting) return;
+
+    // Add bounds checking for position
+    if (position < 0 || position >= deviceList.size()) {
+      return;
+    }
+
     indexValue = position;
     if (isBleConnected()) {
       if (bleDevice.address.equals(device.address)) {
@@ -125,16 +131,22 @@ public class BluetoothManager {
         @Override
         public void onStart(boolean startConnectSuccess, String info, BleDevice device) {
           bleDevice = device;
-          deviceList.remove(indexValue);
-          deviceList.add(indexValue, device);
+          // Add bounds checking before modifying deviceList
+          if (indexValue >= 0 && indexValue < deviceList.size()) {
+            deviceList.remove(indexValue);
+            deviceList.add(indexValue, device);
+          }
           adapter.notifyDataSetChanged();
         }
 
         @Override
         public void onConnected(BleDevice device) {
           bleDevice = device;
-          deviceList.remove(indexValue);
-          deviceList.add(indexValue, device);
+          // Add bounds checking before modifying deviceList
+          if (indexValue >= 0 && indexValue < deviceList.size()) {
+            deviceList.remove(indexValue);
+            deviceList.add(indexValue, device);
+          }
           adapter.notifyDataSetChanged();
           addDeviceInfoDataAndUpdate();
           Logger.i("Successfully connected: " + " " + device);
@@ -159,8 +171,11 @@ public class BluetoothManager {
         public void onFailure(int failCode, String info, BleDevice device) {
           Logger.e("connect fail:" + info);
           bleDevice = null;
-          deviceList.remove(indexValue);
-          deviceList.add(indexValue, device);
+          // Add bounds checking before modifying deviceList
+          if (indexValue >= 0 && indexValue < deviceList.size()) {
+            deviceList.remove(indexValue);
+            deviceList.add(indexValue, device);
+          }
           Toast.makeText(context, "Connection fail: " + info, Toast.LENGTH_LONG).show();
           adapter.notifyDataSetChanged();
         }
@@ -256,7 +271,7 @@ public class BluetoothManager {
 
   private void onSerialDataReceived(String data) {
     // Add whatever you want here
-    Logger.i("Serial data received from BLE: " + data);
+    // Logger.i("Serial data received from BLE: " + data);
     localBroadcastManager.sendBroadcast(
         new Intent(Constants.DEVICE_ACTION_DATA_RECEIVED)
             .putExtra("from", "usb")

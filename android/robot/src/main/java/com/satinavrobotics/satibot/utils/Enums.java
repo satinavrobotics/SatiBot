@@ -86,9 +86,9 @@ public class Enums {
   }
 
   public enum SpeedMode {
-    SLOW(128),
-    NORMAL(192),
-    FAST(255);
+    SLOW(64), // 0.25
+    NORMAL(100), // 0.4
+    FAST(128); // 0.5
 
     private final int value;
 
@@ -108,43 +108,6 @@ public class Enums {
       }
       return null;
     }
-  }
-
-  public enum DriveMode {
-    DUAL(0),
-    GAME(1),
-    JOYSTICK(2);
-
-    private final int value;
-
-    DriveMode(final int value) {
-      this.value = value;
-    }
-
-    public int getValue() {
-      return value;
-    }
-
-    public static DriveMode getByID(int value) {
-      for (final DriveMode element : EnumSet.allOf(DriveMode.class)) {
-        if (element.value == value) {
-          return element;
-        }
-      }
-      return null;
-    }
-  }
-
-  public static DriveMode switchDriveMode(DriveMode mode) {
-    switch (mode) {
-      case DUAL:
-        return DriveMode.GAME;
-      case GAME:
-        return DriveMode.JOYSTICK;
-      case JOYSTICK:
-        return DriveMode.DUAL;
-    }
-    return null;
   }
 
   public enum VehicleIndicator {

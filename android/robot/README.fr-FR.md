@@ -44,7 +44,7 @@ Ici, vous pouvez vérifier les permissions de l'application et les ajuster si n�
 
 #### Diffusion Vidéo
 
-Vous pouvez choisir entre `WebRTC` et `RTSP` pour diffuser la vidéo vers un appareil externe. L'application de contrôle du téléphone et le serveur node-js doivent tous deux être configurés sur `WebRTC`. Le contrôleur Python s'attend à ce que le flux soit configuré sur `RTSP`.
+L'application utilise `LiveKit` pour diffuser la vidéo vers des appareils externes.
 
 #### Connexion Bluetooth
 

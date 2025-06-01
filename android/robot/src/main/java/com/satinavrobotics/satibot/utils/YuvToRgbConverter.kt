@@ -1,4 +1,4 @@
-package com.satibot.utils
+package com.satinavrobotics.satibot.utils
 
 import android.content.Context
 import android.graphics.Bitmap

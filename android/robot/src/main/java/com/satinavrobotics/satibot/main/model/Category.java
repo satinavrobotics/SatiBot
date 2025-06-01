@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.model;
+package com.satinavrobotics.satibot.main.model;
 
 import java.util.List;
 

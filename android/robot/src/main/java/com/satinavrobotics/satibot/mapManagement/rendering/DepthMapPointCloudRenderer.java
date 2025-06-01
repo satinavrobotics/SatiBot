@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.ar.core.exceptions.NotYetAvailableException;
-import com.satinavrobotics.satibot.mapManagement.AsyncVoxelFilter;
+import com.satinavrobotics.satibot.mapManagement.pcd_processing.AsyncVoxelFilter;
 import com.satinavrobotics.satibot.mapManagement.PointCloudGenerator;
 
 /**

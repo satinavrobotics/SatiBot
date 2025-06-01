@@ -7,6 +7,8 @@ import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 import com.google.ar.core.exceptions.NotYetAvailableException;
+import com.satinavrobotics.satibot.mapManagement.pcd_processing.AsyncOutlierDetector;
+import com.satinavrobotics.satibot.mapManagement.pcd_processing.MedianDepthImageFilter;
 
 import java.nio.ByteBuffer;
 import java.nio.ShortBuffer;
@@ -205,12 +207,12 @@ public class PointCloudGenerator {
             long startTime = System.currentTimeMillis();
 
             // Apply median filter
-            short[] filteredDepth = DepthImageFilter.applyMedianFilter(
+            short[] filteredDepth = MedianDepthImageFilter.applyMedianFilter(
                     depthBuf, depthWidth, depthHeight, rowStride, DEFAULT_MEDIAN_KERNEL_SIZE);
 
             if (filteredDepth != null) {
                 // Replace the original depth buffer with the filtered one
-                depthBuf = DepthImageFilter.createShortBuffer(filteredDepth);
+                depthBuf = MedianDepthImageFilter.createShortBuffer(filteredDepth);
 
                 long duration = System.currentTimeMillis() - startTime;
                 Log.d(TAG, "Applied median filtering to depth image in " + duration + "ms");

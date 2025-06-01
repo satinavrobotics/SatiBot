@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.pointGoalNavigation;
+package com.satinavrobotics.satibot.arcore;
 
 import android.app.Dialog;
 import android.os.Bundle;

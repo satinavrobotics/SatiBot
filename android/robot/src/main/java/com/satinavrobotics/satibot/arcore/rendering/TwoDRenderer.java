@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.pointGoalNavigation.rendering;
+package com.satinavrobotics.satibot.arcore.rendering;
 
 /*
 Copyright 2017 Google Inc.

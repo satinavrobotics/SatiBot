@@ -2,7 +2,7 @@ package com.satinavrobotics.satibot.env;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-
+import livekit.org.webrtc.VideoFrame;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -11,8 +11,6 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-
-import livekit.org.webrtc.VideoFrame;
 
 public class ExternalCameraConnector {
 
@@ -34,6 +32,15 @@ public class ExternalCameraConnector {
      */
     public interface CaptureListener {
         void onImageCaptured(VideoFrame frame);
+        void onError(Exception e);
+    }
+
+    /**
+     * Listener for receiving a captured still image as an Android Bitmap.
+     * This interface does not require LiveKit dependencies.
+     */
+    public interface BitmapCaptureListener {
+        void onImageCaptured(Bitmap bitmap);
         void onError(Exception e);
     }
 
@@ -119,6 +126,57 @@ public class ExternalCameraConnector {
     }
 
     /**
+     * Captures a still image from the camera and returns it as a Bitmap.
+     * This method does not require LiveKit dependencies.
+     *
+     * @param stillUrl The URL to capture a still image.
+     * @param listener Callback for capture events.
+     */
+    public void captureBitmap(final String stillUrl, final BitmapCaptureListener listener) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                HttpURLConnection huc = null;
+                try {
+                    URL url = new URL(stillUrl);
+                    huc = (HttpURLConnection) url.openConnection();
+                    huc.setRequestMethod("GET");
+                    huc.setConnectTimeout(5000);
+                    huc.setReadTimeout(5000);
+                    huc.setDoInput(true);
+                    huc.connect();
+
+                    if (huc.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                        InputStream in = huc.getInputStream();
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        byte[] buffer = new byte[1024];
+                        int bytesRead;
+
+                        while ((bytesRead = in.read(buffer)) != -1) {
+                            baos.write(buffer, 0, bytesRead);
+                        }
+                        byte[] imageData = baos.toByteArray();
+                        Bitmap bitmap = BitmapFactory.decodeByteArray(imageData, 0, imageData.length);
+                        if (bitmap != null) {
+                            listener.onImageCaptured(bitmap);
+                        } else {
+                            listener.onError(new Exception("Failed to decode image."));
+                        }
+                    } else {
+                        listener.onError(new Exception("Failed to capture image. Response code: " + huc.getResponseCode()));
+                    }
+                } catch (Exception e) {
+                    listener.onError(e);
+                } finally {
+                    if (huc != null) {
+                        huc.disconnect();
+                    }
+                }
+            }
+        }).start();
+    }
+
+    /**
      * Captures a still image from the camera and returns it as a VideoFrame.
      *
      * @param stillUrl The URL to capture a still image.
@@ -172,7 +230,7 @@ public class ExternalCameraConnector {
     /**
      * Custom implementation of VideoFrame.Buffer that wraps an Android Bitmap.
      */
-    private static class BitmapBuffer implements VideoFrame.Buffer {
+    public static class BitmapBuffer implements VideoFrame.Buffer {
 
         private final Bitmap bitmap;
 
@@ -181,6 +239,14 @@ public class ExternalCameraConnector {
                 throw new IllegalArgumentException("Bitmap cannot be null.");
             }
             this.bitmap = bitmap;
+        }
+
+        /**
+         * Get the underlying bitmap
+         * @return The bitmap wrapped by this buffer
+         */
+        public Bitmap getBitmap() {
+            return bitmap;
         }
 
         @Override

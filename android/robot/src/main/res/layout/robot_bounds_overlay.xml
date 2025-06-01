@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Container for robot bounds lines -->
+    <LinearLayout
+        android:id="@+id/robot_bounds_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="0dp"
+        android:orientation="horizontal">
+
+        <!-- Left line -->
+        <View
+            android:id="@+id/robot_left_line"
+            android:layout_width="15dp"
+            android:layout_height="200dp"
+            android:layout_marginStart="50dp"
+            android:background="#FF000000"
+            android:visibility="visible" />
+
+        <!-- Spacer to push the right line to the end -->
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Right line -->
+        <View
+            android:id="@+id/robot_right_line"
+            android:layout_width="15dp"
+            android:layout_height="200dp"
+            android:layout_marginEnd="50dp"
+            android:background="#FF000000"
+            android:visibility="visible" />
+
+    </LinearLayout>
+
+</FrameLayout>

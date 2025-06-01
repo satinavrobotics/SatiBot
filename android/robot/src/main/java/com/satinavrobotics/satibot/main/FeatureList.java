@@ -1,11 +1,11 @@
-package com.satinavrobotics.satibot.common;
+package com.satinavrobotics.satibot.main;
 
 import java.util.ArrayList;
 import org.jetbrains.annotations.NotNull;
 import com.satinavrobotics.satibot.R;
 
-import com.satinavrobotics.satibot.model.Category;
-import com.satinavrobotics.satibot.model.SubCategory;
+import com.satinavrobotics.satibot.main.model.Category;
+import com.satinavrobotics.satibot.main.model.SubCategory;
 
 public class FeatureList {
   // region Properties

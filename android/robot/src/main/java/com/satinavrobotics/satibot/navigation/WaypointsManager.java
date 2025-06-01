@@ -1,4 +1,6 @@
-package com.satinavrobotics.satibot.env;
+package com.satinavrobotics.satibot.navigation;
+
+import com.satinavrobotics.satibot.env.StatusManager;
 
 import org.json.JSONArray;
 import org.json.JSONException;

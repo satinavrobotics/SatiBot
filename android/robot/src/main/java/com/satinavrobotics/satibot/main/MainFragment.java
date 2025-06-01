@@ -1,6 +1,5 @@
 package com.satinavrobotics.satibot.main;
 
-import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -8,22 +7,18 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
-import org.openbot.R;
-import org.openbot.databinding.FragmentMainBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentMainBinding;
 
-import com.satinavrobotics.satibot.common.FeatureList;
-import com.satinavrobotics.satibot.model.SubCategory;
-import com.satinavrobotics.satibot.original.DefaultActivity;
+import com.satinavrobotics.satibot.main.model.SubCategory;
 
 import timber.log.Timber;
 
 public class MainFragment extends Fragment implements OnItemClickListener<SubCategory> {
 
-  private MainViewModel mViewModel;
-  private FragmentMainBinding binding;
+    private FragmentMainBinding binding;
 
   @Nullable
   @Override
@@ -38,8 +33,6 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
   @Override
   public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
     super.onViewCreated(view, savedInstanceState);
-
-    mViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
     binding.list.setLayoutManager(new LinearLayoutManager(requireContext()));
     binding.list.setAdapter(new CategoryAdapter(FeatureList.getCategories(), this));
   }
@@ -53,12 +46,12 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_localControlFragment);
         break;
-      case FeatureList.FREE_ROAM:
+      case FeatureList.REMOTE_CONTROL:
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_freeRoamFragment);
         break;
 
-      case FeatureList.DATA_COLLECTION:
+      case FeatureList.GAMEPAD_CONTROL:
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_loggerFragment);
         break;
@@ -71,23 +64,6 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
       case FeatureList.ROBOT_INFO:
         Navigation.findNavController(requireView())
             .navigate(R.id.action_mainFragment_to_robotInfoFragment);
-        break;
-
-
-
-      case FeatureList.AUTOPILOT:
-        Navigation.findNavController(requireView())
-            .navigate(R.id.action_mainFragment_to_autopilotFragment);
-        break;
-
-      case FeatureList.OBJECT_NAV:
-        Navigation.findNavController(requireView())
-            .navigate(R.id.action_mainFragment_to_objectNavFragment);
-        break;
-
-      case FeatureList.POINT_GOAL_NAVIGATION:
-        Navigation.findNavController(requireView())
-            .navigate(R.id.action_mainFragment_to_pointGoalNavigationFragment);
         break;
 
       case FeatureList.MODEL_MANAGEMENT:
@@ -105,9 +81,19 @@ public class MainFragment extends Fragment implements OnItemClickListener<SubCat
             .navigate(R.id.action_mainFragment_to_pointCloudMappingFragment);
         break;
 
-      case FeatureList.DEFAULT:
-        Intent intent = new Intent(requireActivity(), DefaultActivity.class);
-        startActivity(intent);
+      case FeatureList.DEPTH_MANAGEMENT:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_depthVisualizationFragment);
+        break;
+
+      case FeatureList.DEPTH_NAVIGATION:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_autonomousNavigationFragment);
+        break;
+
+      case FeatureList.PD_TUNING:
+        Navigation.findNavController(requireView())
+            .navigate(R.id.action_mainFragment_to_pdTuningFragment);
         break;
     }
   }

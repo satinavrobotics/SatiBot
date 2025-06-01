@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.projects;
+package com.satinavrobotics.satibot.googleServices;
 
 import com.google.firebase.auth.FirebaseUser;
 

@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.mapManagement;
+package com.satinavrobotics.satibot.mapManagement.pcd_processing;
 
 import android.util.Log;
 import java.nio.ShortBuffer;
@@ -7,8 +7,8 @@ import java.util.Arrays;
 /**
  * Provides filtering operations for depth images to reduce noise and improve quality.
  */
-public class DepthImageFilter {
-    private static final String TAG = DepthImageFilter.class.getSimpleName();
+public class MedianDepthImageFilter {
+    private static final String TAG = MedianDepthImageFilter.class.getSimpleName();
     
     /**
      * Applies median filtering to a depth image.

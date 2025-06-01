@@ -1,0 +1,515 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:keepScreenOn="true"
+    tools:context="com.satinavrobotics.satibot.vehicle.pd.PdTuningFragment">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Top Controls Bar -->
+        <LinearLayout
+            android:id="@+id/topControlsBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="8dp"
+            android:gravity="center_vertical"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <!-- Status Info -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PD Tuning"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/connectionStatusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Not Connected"
+                    android:textColor="#FFFF00"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Connection Toggles -->
+            <LinearLayout
+                android:id="@+id/connectionToggles"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <ToggleButton
+                    android:id="@+id/usbToggle"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/usb_toggle"
+                    android:textOff=""
+                    android:textOn=""/>
+
+                <ToggleButton
+                    android:id="@+id/bleToggle"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/ble_toggle"
+                    android:textOff=""
+                    android:textOn=""/>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Main Content Area -->
+        <FrameLayout
+            android:id="@+id/mainContentArea"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toBottomOf="@id/topControlsBar"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintEnd_toEndOf="parent">
+
+            <!-- Game-like Controls Layout -->
+            <androidx.constraintlayout.widget.ConstraintLayout
+                android:id="@+id/wheelControlsLayout"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="visible">
+
+                <!-- Left Side Joystick (Acceleration) - Now on right side -->
+                <FrameLayout
+                    android:id="@+id/leftJoystickContainer"
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:background="@drawable/joystick_background_red"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    android:layout_marginEnd="32dp"
+                    android:layout_marginBottom="32dp">
+
+                    <ImageView
+                        android:id="@+id/accelerationArrowUp"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:src="@drawable/ic_arrow_up"
+                        android:layout_gravity="center_horizontal|top"
+                        android:contentDescription="Forward" />
+
+                    <ImageView
+                        android:id="@+id/accelerationArrowDown"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:src="@drawable/ic_arrow_down"
+                        android:layout_gravity="center_horizontal|bottom"
+                        android:contentDescription="Backward" />
+
+                    <View
+                        android:id="@+id/accelerationJoystickThumb"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:background="@drawable/joystick_thumb_red"
+                        android:layout_gravity="center" />
+
+                    <SeekBar
+                        android:id="@+id/forwardSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone"
+                        android:rotation="270"
+                        android:progress="50"
+                        android:max="100" />
+                </FrameLayout>
+
+                <!-- Right Side Joystick (Steering) - Now on left side -->
+                <FrameLayout
+                    android:id="@+id/rightJoystickContainer"
+                    android:layout_width="200dp"
+                    android:layout_height="200dp"
+                    android:background="@drawable/joystick_background_red"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_marginStart="32dp"
+                    android:layout_marginBottom="32dp">
+
+                    <ImageView
+                        android:id="@+id/steeringArrowLeft"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:src="@drawable/ic_arrow_left"
+                        android:layout_gravity="start|center_vertical"
+                        android:contentDescription="Left" />
+
+                    <ImageView
+                        android:id="@+id/steeringArrowRight"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:src="@drawable/ic_arrow_right"
+                        android:layout_gravity="end|center_vertical"
+                        android:contentDescription="Right" />
+
+                    <View
+                        android:id="@+id/steeringJoystickThumb"
+                        android:layout_width="70dp"
+                        android:layout_height="70dp"
+                        android:background="@drawable/joystick_thumb_red"
+                        android:layout_gravity="center" />
+
+                    <SeekBar
+                        android:id="@+id/rightSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="0dp"
+                        android:visibility="gone"
+                        android:progress="50"
+                        android:max="100" />
+                </FrameLayout>
+
+                <!-- Emergency Stop Button (Top Left) -->
+                <Button
+                    android:id="@+id/centerStopButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="STOP"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="#FF0000"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    android:layout_margin="0dp" />
+
+                <!-- Control Info (Center of Screen) -->
+                <TextView
+                    android:id="@+id/controlInfo"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Control: 0,0"
+                    android:textColor="#FFFFFF"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    app:layout_constraintTop_toTopOf="parent"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintEnd_toEndOf="parent" />
+            </androidx.constraintlayout.widget.ConstraintLayout>
+
+            <!-- Toggle button for showing/hiding the control panel -->
+            <ImageButton
+                android:id="@+id/toggleControlPanelButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_margin="16dp"
+                android:layout_gravity="bottom|end"
+                android:background="@drawable/circle_button_background"
+                android:contentDescription="Toggle Control Panel"
+                android:src="@android:drawable/arrow_up_float" />
+
+        </FrameLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Bottom sheet for PD tuning controls -->
+    <androidx.cardview.widget.CardView
+        android:id="@+id/controlPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="0dp"
+        app:cardBackgroundColor="#80000000"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="8dp"
+        app:layout_behavior="com.google.android.material.bottomsheet.BottomSheetBehavior"
+        app:behavior_hideable="true"
+        app:behavior_peekHeight="0dp"
+        app:behavior_skipCollapsed="true"
+        app:behavior_draggable="true">
+
+        <com.satinavrobotics.satibot.depth.depth_sources.CustomScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Handle for dragging the panel -->
+                <View
+                    android:id="@+id/dragHandle"
+                    android:layout_width="40dp"
+                    android:layout_height="4dp"
+                    android:layout_gravity="center_horizontal"
+                    android:layout_marginBottom="16dp"
+                    android:background="#FFFFFF" />
+
+                <!-- Title -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PD Control Parameters"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
+
+                <!-- KP Parameter -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Proportional Gain (Kp)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/kpSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="100" />
+
+                    <TextView
+                        android:id="@+id/kpValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="1.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- KD Parameter -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Derivative Gain (Kd)"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/kdSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="50" />
+
+                    <TextView
+                        android:id="@+id/kdValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="0.500"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- No Control Scale -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="No Control Scale"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/noControlScaleSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="100" />
+
+                    <TextView
+                        android:id="@+id/noControlScaleValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="1.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- Normal Control Scale -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Normal Control Scale"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/normalControlScaleSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="100" />
+
+                    <TextView
+                        android:id="@+id/normalControlScaleValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="1.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- Rotation Scale -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Rotation Scale"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/rotationScaleSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="1000"
+                        android:progress="100" />
+
+                    <TextView
+                        android:id="@+id/rotationScaleValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="1.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- Velocity Bias -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Velocity Bias"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/velocityBiasSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="2000"
+                        android:progress="1000" />
+
+                    <TextView
+                        android:id="@+id/velocityBiasValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="0.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- Rotation Bias -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="Rotation Bias"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <SeekBar
+                        android:id="@+id/rotationBiasSeekBar"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="2000"
+                        android:progress="1000" />
+
+                    <TextView
+                        android:id="@+id/rotationBiasValue"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="0.000"
+                        android:textColor="#FFFFFF"
+                        android:minWidth="60dp" />
+                </LinearLayout>
+
+                <!-- Set Button -->
+                <Button
+                    android:id="@+id/setParametersButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="Set Parameters"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#4CAF50"
+                    android:textColor="#FFFFFF"
+                    android:padding="12dp" />
+
+            </LinearLayout>
+        </com.satinavrobotics.satibot.depth.depth_sources.CustomScrollView>
+    </androidx.cardview.widget.CardView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

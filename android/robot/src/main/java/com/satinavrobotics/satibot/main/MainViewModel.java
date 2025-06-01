@@ -4,7 +4,7 @@ import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
-import com.satinavrobotics.satibot.model.SubCategory;
+import com.satinavrobotics.satibot.main.model.SubCategory;
 import com.satinavrobotics.satibot.vehicle.Vehicle;
 
 public class MainViewModel extends ViewModel {

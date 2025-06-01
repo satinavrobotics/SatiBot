@@ -12,7 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.jetbrains.annotations.NotNull;
-import org.openbot.databinding.ItemMapBinding;
+import com.satinavrobotics.satibot.databinding.ItemMapBinding;
 
 import java.util.List;
 
@@ -46,12 +46,18 @@ public class MapAdapter extends RecyclerView.Adapter<MapAdapter.ViewHolder> {
         holder.mItem = mValues.get(position);
         holder.mapTitle.setText(mValues.get(position).getName());
 
-        // Don't show anchor count for Earth map
-        if ("earth".equals(mValues.get(position).getId())) {
+        // Special handling for Earth map and No Map option
+        String mapId = mValues.get(position).getId();
+        boolean isSpecialMap = "earth".equals(mapId) || "no_map".equals(mapId);
+        if (isSpecialMap) {
+            // Don't show anchor count for special maps
             holder.anchorCount.setVisibility(View.GONE);
+            // Don't show delete icon for special maps
+            holder.deleteMap.setVisibility(View.GONE);
         } else {
             holder.anchorCount.setVisibility(View.VISIBLE);
             holder.anchorCount.setText(mValues.get(position).getAnchorCount() + " anchors");
+            holder.deleteMap.setVisibility(View.VISIBLE);
         }
 
         // Set selection state
@@ -61,7 +67,10 @@ public class MapAdapter extends RecyclerView.Adapter<MapAdapter.ViewHolder> {
 
         // Make the entire item clickable
         holder.itemView.setOnClickListener(v -> itemClickListener.onItemClick(holder.mItem));
-        holder.deleteMap.setOnClickListener(v -> itemClickListener.onMapDelete(holder.mItem));
+        // Only set delete click listener if not a special map
+        if (!isSpecialMap) {
+            holder.deleteMap.setOnClickListener(v -> itemClickListener.onMapDelete(holder.mItem));
+        }
     }
 
     @Override

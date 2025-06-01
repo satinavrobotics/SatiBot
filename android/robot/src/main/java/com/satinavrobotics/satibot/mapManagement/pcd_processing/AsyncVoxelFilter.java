@@ -1,10 +1,12 @@
-package com.satinavrobotics.satibot.mapManagement;
+package com.satinavrobotics.satibot.mapManagement.pcd_processing;
 
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Process;
 import android.util.Log;
+
+import com.satinavrobotics.satibot.mapManagement.VoxelGrid;
 
 import java.util.ArrayList;
 import java.util.List;

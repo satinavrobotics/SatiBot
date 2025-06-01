@@ -1,16 +1,14 @@
 // Created by Matthias Mueller - Intel Intelligent Systems Lab - 2020
 
-package com.satinavrobotics.satibot.env;
+package com.satinavrobotics.satibot.controller;
 
 import android.util.Pair;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
-import com.satinavrobotics.satibot.utils.Enums.DriveMode;
 import com.satinavrobotics.satibot.vehicle.Control;
 
 public class GameController {
-  private DriveMode driveMode;
 
   // Current controller state
   private float currentLinearVelocity = 0.0f;
@@ -28,18 +26,6 @@ public class GameController {
   // Deadzone settings - ignore inputs below these thresholds
   private float triggerDeadzone = 0.01f; // Values below this are treated as zero
   private float steeringDeadzone = 0.01f; // Values below this are treated as zero
-
-  public GameController(DriveMode driveMode) {
-    this.driveMode = driveMode;
-  }
-
-  public void setDriveMode(DriveMode mode) {
-    driveMode = mode;
-  }
-
-  public DriveMode getDriveMode() {
-    return driveMode;
-  }
 
   /**
    * Get the current control state based on stored controller values
@@ -148,7 +134,7 @@ public class GameController {
     return 0;
   }
 
-  public Control processButtonInput(KeyEvent event) {
+  public void processButtonInput(KeyEvent event) {
     // Process button input and update controller state
     switch (event.getKeyCode()) {
       case KeyEvent.KEYCODE_BUTTON_A:
@@ -183,9 +169,6 @@ public class GameController {
         //            .show();
         break;
     }
-
-    // Return the current control state
-    return getCurrentControl();
   }
 
   /**
@@ -278,9 +261,6 @@ public class GameController {
 
       // Update velocities based on trigger and steering values
       updateVelocitiesFromTriggers();
-
-      // Return the current control state
-    getCurrentControl();
   }
 
   public static Pair<Float, Float> processJoystickInputLeft(MotionEvent event, int historyPos) {

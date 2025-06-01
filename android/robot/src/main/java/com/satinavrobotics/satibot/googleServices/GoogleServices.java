@@ -21,12 +21,10 @@ import com.google.api.client.http.ByteArrayContent;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
-import com.google.api.client.util.DateTime;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
-import com.google.common.reflect.TypeToken;
 import com.google.firebase.auth.AuthCredential;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
@@ -37,25 +35,15 @@ import com.google.gson.GsonBuilder;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-import org.openbot.databinding.FragmentProjectsBinding;
+import com.google.gson.reflect.TypeToken;
 
 import com.satinavrobotics.satibot.env.SharedPreferencesManager;
 import com.satinavrobotics.satibot.modelManagement.ModelAdapter;
-import com.satinavrobotics.satibot.projects.DriveProjectsAdapter;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
-import com.satinavrobotics.satibot.projects.ProjectsDataInObject;
-import com.satinavrobotics.satibot.projects.ProjectsFragment;
 import com.satinavrobotics.satibot.tflite.Model;
 import com.satinavrobotics.satibot.utils.FileUtils;
 
@@ -73,9 +61,7 @@ public class GoogleServices extends Fragment {
     private final Context mContext;
     private final GoogleSignInCallback mCallback;
     public final GoogleSignInClient mGoogleSignInClient;
-    private final ProjectsFragment projectsFragment;
     private final FirebaseAuth firebaseAuth;
-    public ArrayList<ProjectsDataInObject> projectsList = new ArrayList<>();
     private final SharedPreferencesManager sharedPreferencesManager;
 
     public static GoogleServices getInstance() {
@@ -93,7 +79,6 @@ public class GoogleServices extends Fragment {
         mActivity = activity;
         mContext = context;
         mCallback = callback;
-        projectsFragment = new ProjectsFragment();
         firebaseAuth = FirebaseAuth.getInstance();
         // Set up Google Sign-In options
         GoogleSignInOptions gso =
@@ -201,7 +186,7 @@ public class GoogleServices extends Fragment {
             mCallback.onSignInFailed(new Exception("No network connection available"));
             return null;
         }
-        
+
         GoogleSignInAccount googleAccount = GoogleSignIn.getLastSignedInAccount(mContext);
         if (googleAccount != null) {
             // Set up Google Account Credential.
@@ -218,127 +203,7 @@ public class GoogleServices extends Fragment {
         return null;
     }
 
-    /**
-     * Retrieves a list of Google Drive files that are not trashed and have the file extension ".js".
-     *
-     * @param binding
-     * @param adapter
-     * @param binding
-     */
-    public void accessDriveFiles(DriveProjectsAdapter adapter, FragmentProjectsBinding binding) {
-        // get a Google Drive service instance.
-        Drive googleDriveService = getDriveService();
-        if (googleDriveService != null) {
-            // create a new thread to perform the network call in the background.
-            new Thread(
-                    () -> {
-                        String pageToken = null;
-                        do {
-                            try {
-                                // query for files on Google Drive that are not in the trash folder and have a
-                                // ".js" extension.
-                                FileList result =
-                                        googleDriveService
-                                                .files()
-                                                .list()
-                                                .setSpaces("drive")
-                                                .setFields("nextPageToken, files(id, name, createdTime, modifiedTime)")
-                                                .setPageToken(pageToken)
-                                                .setQ("trashed = false")
-                                                .execute();
-                                List<File> driveProjectFiles = result.getFiles();
-                                // Create a HashSet to store the drive project IDs.
-                                Set<String> driveProjectId = new HashSet<>();
-                                // Create a HashSet to store the local project IDs.
-                                Set<String> localProjectId = new HashSet<>();
-                                // Create a HashSet to store the local project filename.
-                                Set<String> localProjectName = new HashSet<>();
 
-                                for (ProjectsDataInObject obj : projectsList) {
-                                    localProjectId.add(obj.getProjectId());
-                                }
-                                // Iterate through the files
-                                for (File file : driveProjectFiles) {
-                                    if (file.getName().endsWith(".js")) {
-                                        driveProjectId.add(file.getId());
-                                        String projectName = file.getName();
-//                                        System.out.println("name"+projectName);
-                                        String projectId = file.getId();
-                                        DateTime projectDate = file.getModifiedTime();
-
-                                        // Read the content of the file
-                                        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                                        googleDriveService
-                                                .files()
-                                                .get(file.getId())
-                                                .executeMediaAndDownloadTo(outputStream);
-                                        String projectCommands = outputStream.toString();
-
-                                        if (!localProjectId.contains(file.getId())) {
-                                            // Create a Project object and add it to the ArrayList
-                                            //System.out.printf("UpdatedFileName",projectName);
-
-                                            projectsList.add(
-                                                    new ProjectsDataInObject(
-                                                            projectId, projectName, projectDate, projectCommands));
-                                        }
-                                        else if(localProjectId.contains(file.getId())){
-                                            int projectIndex = -1;
-                                            for (int i = 0; i < projectsList.size(); i++) {
-                                                if (projectsList.get(i).getProjectId().equals(projectId)) {
-                                                    // Project with the same ID exists, store its index
-                                                    projectIndex = i;
-                                                    break; // No need to continue iterating
-                                                }
-                                            }
-                                            projectsList.remove(projectIndex);
-                                            projectsList.add(
-                                                    new ProjectsDataInObject(
-                                                            projectId, projectName, projectDate, projectCommands));
-
-
-//                                          projectsList.add(new ProjectsDataInObject(projectId,projectName,projectDate,projectCommands));
-                                        }
-                                    }
-                                }
-
-                                // Iterate over the local projects and remove any that are not present in the
-                                // driveProjectId set
-                                // MyProject
-                                Iterator<ProjectsDataInObject> iterator = projectsList.iterator();
-                                while (iterator.hasNext()) {
-                                    ProjectsDataInObject project = iterator.next();
-                                    if (!driveProjectId.contains(project.getProjectId())) {
-                                        iterator.remove();
-                                    }
-                                    sharedPreferencesManager.setProjectLIst(projectsList);
-                                }
-
-                                // update the UI on the main thread to reflect the changes in the list of drive
-                                // files.
-                                mActivity.runOnUiThread(
-                                        () -> {
-                                            adapter.notifyDataSetChanged();
-                                            projectsFragment.updateMessage(projectsList, binding);
-                                        });
-                                // update page token to get the next set of files if available.
-                                pageToken = result.getNextPageToken();
-                            } catch (IOException e) {
-                                // log any errors that occur and set page token to null to exit the loop.
-                                e.printStackTrace();
-                                pageToken = null;
-                                mActivity.runOnUiThread(
-                                        () -> {
-                                            adapter.notifyDataSetChanged();
-                                            projectsFragment.updateMessage(projectsList, binding);
-                                        });
-                            }
-                            // continue querying for files while there is a valid page token.
-                        } while (pageToken != null);
-                    })
-                    .start();
-        }
-    }
 
     /**
      * Downloads a file from Google Drive with the given file ID.
@@ -389,86 +254,9 @@ public class GoogleServices extends Fragment {
         }
     }
 
-    /**
-     * Deletes a file with the given ID from Google Drive.
-     *
-     * @param fileId fileId the ID of the file to delete.
-     */
-    public void deleteFile(
-            String fileId,
-            String projectName,
-            DriveProjectsAdapter adapter,
-            FragmentProjectsBinding binding) {
-        // Create an ExecutorService with a single thread
-        ExecutorService executor = Executors.newSingleThreadExecutor();
-        executor.execute(
-                () -> {
-                    Drive googleDriveService = getDriveService();
-                    if (googleDriveService != null) {
-                        try {
-                            // Get the XML file ID associated with the project name
-                            String xmlFileId = getXmlFileId(projectName, googleDriveService);
-                            // Delete the file with the given ID
-                            googleDriveService.files().delete(fileId).execute();
-                            // If XML file ID exists, delete the XML file as well
-                            if (xmlFileId != null) {
-                                googleDriveService.files().delete(xmlFileId).execute();
-                            }
-                            // Access Drive files again to update the adapter and binding
-                            accessDriveFiles(adapter, binding);
-                            Timber.tag("Google Drive File").d("File deleted successfully");
-                        } catch (IOException error) {
-                            // log any errors that occur when deleting the file.
-                            error.printStackTrace();
-                            Timber.tag("Google Drive File").e(error);
-                        }
-                    }
-                });
-    }
 
-    /**
-     * This method queries Google Drive for files that are not in the trash folder and have a .js
-     * extension. It iterates through the files to find the one whose name matches the provided
-     * projectName with the .xml extension. The corresponding XML file ID is returned if found.
-     *
-     * @param projectName
-     * @param googleDriveService
-     * @return
-     */
-    private String getXmlFileId(String projectName, Drive googleDriveService) {
-        String pageToken = null;
-        String xmlProjectId = null;
-        do {
-            try {
-                // query for files on Google Drive that are not in the trash folder and have a
-                // ".js" extension.
-                FileList result =
-                        googleDriveService
-                                .files()
-                                .list()
-                                .setSpaces("drive")
-                                .setFields("nextPageToken, files(id, name, createdTime, modifiedTime)")
-                                .setPageToken(pageToken)
-                                .setQ("trashed = false")
-                                .execute();
-                List<File> driveProjectFiles = result.getFiles();
-                // Iterate through the files and check for the XML file associated with the project name
-                for (File file : driveProjectFiles) {
-                    if ((projectName.replace(".js", ".xml")).equals(file.getName())) {
-                        xmlProjectId = file.getId();
-                    }
-                }
-                // update page token to get the next set of files if available.
-                pageToken = result.getNextPageToken();
-            } catch (IOException e) {
-                // log any errors that occur and set page token to null to exit the loop.
-                e.printStackTrace();
-                pageToken = null;
-            }
-            // continue querying for files while there is a valid page token.
-        } while (pageToken != null);
-        return xmlProjectId;
-    }
+
+
 
     private String checkPlaygroundFolder() {
         Drive getDriveService = getDriveService();

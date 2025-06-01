@@ -12,20 +12,23 @@ import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import com.satinavrobotics.satibot.env.GameController;
+import com.satinavrobotics.satibot.controller.GameController;
 import com.satinavrobotics.satibot.env.SensorReading;
+import com.satinavrobotics.satibot.env.SharedPreferencesManager;
 import com.satinavrobotics.satibot.main.CommonRecyclerViewAdapter;
 import com.satinavrobotics.satibot.main.ScanDeviceAdapter;
 import com.satinavrobotics.satibot.utils.Constants;
-import com.satinavrobotics.satibot.utils.Enums;
+
+import timber.log.Timber;
 
 public class Vehicle {
 
   private int indicator = 0;
-  private int speedMultiplier = 192; // 128,192,255
+  private int speedMultiplier = 192; // 128,192,255 - for linear velocity
+  private int angularMultiplier = 192; // 128,192,255 - for angular velocity
   private Control control = new Control(0, 0);
 
-  private final SensorReading batteryVoltage = new SensorReading();
+  private final SensorReading batteryPercentage = new SensorReading();
   private final SensorReading leftWheelRpm = new SensorReading();
   private final SensorReading rightWheelRpm = new SensorReading();
   private final SensorReading sonarReading = new SensorReading();
@@ -40,17 +43,12 @@ public class Vehicle {
   private final SensorReading currentHeading = new SensorReading();
   private final SensorReading targetHeading = new SensorReading();
 
-  private float minMotorVoltage = 2.5f;
-  private float lowBatteryVoltage = 9.0f;
-  private float maxBatteryVoltage = 12.6f;
-
   private UsbConnection usbConnection;
   protected boolean usbConnected;
   private final Context context;
   private final int baudRate;
 
   private String vehicleType = "";
-  private boolean hasVoltageDivider = false;
   private boolean hasIndicators = false;
   private boolean hasSonar = false;
   private boolean hasBumpSensor = false;
@@ -64,29 +62,7 @@ public class Vehicle {
   SharedPreferences sharedPreferences;
   public String connectionType;
 
-  public float getMinMotorVoltage() {
-    return minMotorVoltage;
-  }
 
-  public void setMinMotorVoltage(float minMotorVoltage) {
-    this.minMotorVoltage = minMotorVoltage;
-  }
-
-  public float getLowBatteryVoltage() {
-    return lowBatteryVoltage;
-  }
-
-  public void setLowBatteryVoltage(float lowBatteryVoltage) {
-    this.lowBatteryVoltage = lowBatteryVoltage;
-  }
-
-  public float getMaxBatteryVoltage() {
-    return maxBatteryVoltage;
-  }
-
-  public void setMaxBatteryVoltage(float maxBatteryVoltage) {
-    this.maxBatteryVoltage = maxBatteryVoltage;
-  }
 
   public boolean isReady() {
     return isReady;
@@ -96,13 +72,7 @@ public class Vehicle {
     isReady = ready;
   }
 
-  public boolean isHasVoltageDivider() {
-    return hasVoltageDivider;
-  }
 
-  public void setHasVoltageDivider(boolean hasVoltageDivider) {
-    this.hasVoltageDivider = hasVoltageDivider;
-  }
 
   public boolean isHasIndicators() {
     return hasIndicators;
@@ -183,10 +153,6 @@ public class Vehicle {
   public void processVehicleConfig(String message) {
     setVehicleType(message.split(":")[0]);
 
-    if (message.contains(":v:")) {
-      setHasVoltageDivider(true);
-      setVoltageFrequency(250);
-    }
     if (message.contains(":i:")) {
       setHasIndicators(true);
     }
@@ -215,32 +181,28 @@ public class Vehicle {
       setHasLedsStatus(true);
     }
   }
-
-  protected Enums.DriveMode driveMode = Enums.DriveMode.GAME;
   private final GameController gameController;
   private Timer heartbeatTimer;
 
   public Vehicle(Context context, int baudRate) {
     this.context = context;
     this.baudRate = baudRate;
-    gameController = new GameController(driveMode);
+    gameController = new GameController();
     sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
     connectionType = getConnectionPreferences("connection_type", "USB");
-  }
 
-  public float getBatteryVoltage() {
-    return batteryVoltage.getReading();
+    // Initialize speed multipliers from preferences
+    SharedPreferencesManager preferencesManager = new SharedPreferencesManager(context);
+    this.speedMultiplier = preferencesManager.getSpeedMultiplier();
+    this.angularMultiplier = preferencesManager.getAngularMultiplier();
   }
 
   public int getBatteryPercentage() {
-    return (int)
-        ((batteryVoltage.getReading() - lowBatteryVoltage)
-            * 100
-            / (maxBatteryVoltage - lowBatteryVoltage));
+    return (int) batteryPercentage.getReading();
   }
 
-  public void setBatteryVoltage(float batteryVoltage) {
-    this.batteryVoltage.setReading(batteryVoltage);
+  public void setBatteryPercentage(float batteryPercentage) {
+    this.batteryPercentage.setReading(batteryPercentage);
   }
 
   public float getLeftWheelRpm() {
@@ -260,20 +222,31 @@ public class Vehicle {
   }
 
   public float getRotation() {
-    float rotation = (getLeftSpeed() - getRightSpeed()) * 180 / (getLeftSpeed() + getRightSpeed());
+    float linear = getLinearVelocity();
+    float angular = getAngularVelocity();
+
+    // Calculate rotation based on angular/linear ratio
+    // Scale by a factor to get a similar range as the original method
+    float rotation = 0f;
+    if (Math.abs(linear) > 0.01f) {
+        rotation = angular / linear * 180;
+    }
+
+    // Handle edge cases
     if (Float.isNaN(rotation) || Float.isInfinite(rotation)) rotation = 0f;
     return rotation;
   }
 
   public int getSpeedPercent() {
-    float throttle = (getLeftSpeed() + getRightSpeed()) / 2;
-    return Math.abs((int) (throttle * 100 / 255)); // 255 is the max speed
+    // Use absolute linear velocity as a percentage of max speed
+    float linearVelocity = Math.abs(getLinearVelocity());
+    return (int)(linearVelocity * 100 / speedMultiplier);
   }
 
   public String getDriveGear() {
-    float throttle = (getLeftSpeed() + getRightSpeed()) / 2;
-    if (throttle > 0) return "D";
-    if (throttle < 0) return "R";
+    float linear = getLinearVelocity();
+    if (linear > 0) return "D";
+    if (linear < 0) return "R";
     return "P";
   }
 
@@ -374,24 +347,9 @@ public class Vehicle {
     sendControl();
   }
 
-  public void setControl(float left, float right) {
-    this.control = new Control(left, right);
-    sendControl();
-  }
-
   public void setControlVelocity(float linear, float angular) {
-    this.control = new Control(linear, angular, true);
+    this.control = new Control(linear, angular);
     sendControl();
-  }
-
-
-  public void setDriveMode(Enums.DriveMode driveMode) {
-    this.driveMode = driveMode;
-    gameController.setDriveMode(driveMode);
-  }
-
-  public Enums.DriveMode getDriveMode() {
-    return driveMode;
   }
 
   public GameController getGameController() {
@@ -404,6 +362,14 @@ public class Vehicle {
 
   public void setSpeedMultiplier(int speedMultiplier) {
     this.speedMultiplier = speedMultiplier;
+  }
+
+  public int getAngularMultiplier() {
+    return angularMultiplier;
+  }
+
+  public void setAngularMultiplier(int angularMultiplier) {
+    this.angularMultiplier = angularMultiplier;
   }
 
   public int getIndicator() {
@@ -461,29 +427,33 @@ public class Vehicle {
   }
 
   private void sendStringToDevice(String message) {
-    if (getConnectionType().equals("USB") && usbConnection != null) {
+    String connectionType = getConnectionType();
+
+    // Debug: Log connection attempts
+    Timber.d("Vehicle.sendStringToDevice(): message='%s', connectionType='%s'",
+             message.trim(), connectionType);
+
+    if (connectionType.equals("USB") && usbConnection != null) {
+      Timber.d("Sending via USB: %s", message.trim());
       usbConnection.send(message);
-    } else if (getConnectionType().equals("Bluetooth")
+    } else if (connectionType.equals("Bluetooth")
         && bluetoothManager != null
         && bluetoothManager.isBleConnected()) {
+      Timber.d("Sending via Bluetooth: %s", message.trim());
       sendStringToBle(message);
+    } else {
+      Timber.w("Cannot send message - no valid connection. USB: %s, BT: %s",
+               (usbConnection != null),
+               (bluetoothManager != null && bluetoothManager.isBleConnected()));
     }
   }
 
-  public float getLeftSpeed() {
-    return control.getLeft() * speedMultiplier;
-  }
-
-  public float getRightSpeed() {
-    return control.getRight() * speedMultiplier;
-  }
-
   public float getLinearVelocity() {
-    return control.getLinear() * speedMultiplier;
+    return control.linear() * speedMultiplier;
   }
 
   public float getAngularVelocity() {
-    return control.getAngular() * speedMultiplier;
+    return control.angular() * angularMultiplier;
   }
 
   public void sendLightIntensity(float frontPercent, float backPercent) {
@@ -496,7 +466,13 @@ public class Vehicle {
     // Send linear and angular velocity instead of left/right wheel speeds
     int linear = (int) (getLinearVelocity());
     int angular = (int) (getAngularVelocity());
-    sendStringToDevice(String.format(Locale.US, "c%d,%d\n", linear, angular));
+    String command = String.format(Locale.US, "c%d,%d\n", linear, angular);
+
+    // Debug: Log the command being sent
+    Timber.d("Vehicle.sendControl(): sending command '%s' (linear=%.2f, angular=%.2f)",
+             command.trim(), getLinearVelocity(), getAngularVelocity());
+
+    sendStringToDevice(command);
   }
 
   protected void sendHeartbeat(int timeout_ms) {
@@ -507,12 +483,21 @@ public class Vehicle {
     sendStringToDevice(String.format(Locale.getDefault(), "s%d\n", interval_ms));
   }
 
-  protected void setVoltageFrequency(int interval_ms) {
-    sendStringToDevice(String.format(Locale.getDefault(), "v%d\n", interval_ms));
-  }
+
 
   protected void setWheelOdometryFrequency(int interval_ms) {
     sendStringToDevice(String.format(Locale.getDefault(), "w%d\n", interval_ms));
+  }
+
+  public void sendTuningParameters(float kp, float kd, float noControlScale,
+                                   float normalControlScale, float rotationScale,
+                                   float velocityBias, float rotationBias) {
+    sendStringToDevice(String.format(Locale.US, "m%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f\n",
+        kp, kd, noControlScale, normalControlScale, rotationScale, velocityBias, rotationBias));
+  }
+
+  public void requestTuningParameters() {
+    sendStringToDevice(String.format(Locale.US, "m\n"));
   }
 
   private class HeartBeatTask extends TimerTask {
@@ -607,5 +592,17 @@ public class Vehicle {
 
   public String getConnectionType() {
     return getConnectionPreferences("connection_type", "USB");
+  }
+
+  /**
+   * Emergency stop: immediately stop the vehicle and send 's1' or 's0' as required.
+   * @param engaged true to engage emergency stop ('s1'), false to release ('s0')
+   */
+  public void emergencyStop(boolean engaged) {
+      if (engaged) {
+          sendStringToDevice("s1\n");
+      } else {
+          sendStringToDevice("s0\n");
+      }
   }
 }

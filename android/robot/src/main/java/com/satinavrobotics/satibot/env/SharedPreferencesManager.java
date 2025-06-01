@@ -2,14 +2,9 @@ package com.satinavrobotics.satibot.env;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import com.google.common.reflect.TypeToken;
-import com.google.gson.Gson;
-import java.lang.reflect.Type;
-import java.util.ArrayList;
-import java.util.List;
 
-import com.satinavrobotics.satibot.projects.ProjectsDataInObject;
-import com.satinavrobotics.satibot.tflite.Network;
+
+
 import com.satinavrobotics.satibot.utils.Enums;
 
 public class SharedPreferencesManager {
@@ -23,7 +18,10 @@ public class SharedPreferencesManager {
   private static final String CONTROL_MODE = "CONTROL_MODE";
   private static final int DEFAULT_SPEED_MODE = Enums.SpeedMode.NORMAL.getValue();
   private static final String SPEED_MODE = "SPEED_MODE";
-  private static final int DEFAULT_DRIVE_MODE = Enums.DriveMode.GAME.getValue();
+  private static final int DEFAULT_SPEED_MULTIPLIER = 192;
+  private static final String SPEED_MULTIPLIER = "SPEED_MULTIPLIER";
+  private static final int DEFAULT_ANGULAR_MULTIPLIER = 192;
+  private static final String ANGULAR_MULTIPLIER = "ANGULAR_MULTIPLIER";
   private static final String DRIVE_MODE = "DRIVE_MODE";
 
   private static final String DEFAULT_MODEL = "DEFAULT_MODEL_NAME";
@@ -35,15 +33,55 @@ public class SharedPreferencesManager {
   private static final String DEFAULT_OBJECT_TYPE = "person";
   // object tracker switch for speed adjusted by estimated object distance
   private static final String OBJECT_NAV_DYNAMIC_SPEED = "OBJECT_NAV_DYNAMICSPEED";
-  private static final int DEFAULT_DEVICE = Network.Device.CPU.ordinal();
   private static final String DEVICE = "DEVICE";
   private static final int DEFAULT_NUM_THREAD = 4;
   private static final String NUM_THREAD = "NUM_THREAD";
   private static final String CAMERA_SWITCH = "CAMERA_SWITCH";
   private static final String SHEET_EXPANDED = "SHEET_EXPANDED";
   private static final String DELAY = "DELAY";
-  private static final String PROJECTS_LIST = "PROJECTS_LIST";
   private static final String CURRENT_MAP_ID = "CURRENT_MAP_ID";
+
+  // Depth source preference
+  private static final String DEPTH_SOURCE = "DEPTH_SOURCE";
+  private static final int DEFAULT_DEPTH_SOURCE = 0; // ARCORE by default
+
+  // Robot parameters preferences
+  private static final String ROBOT_WIDTH_METERS = "ROBOT_WIDTH_METERS";
+  private static final float DEFAULT_ROBOT_WIDTH_METERS = 0.4f;
+
+  private static final String CLOSER_NEXT_THRESHOLD = "CLOSER_NEXT_THRESHOLD";
+  private static final float DEFAULT_CLOSER_NEXT_THRESHOLD = 20.0f;
+
+  private static final String MAX_SAFE_DISTANCE = "MAX_SAFE_DISTANCE";
+  private static final float DEFAULT_MAX_SAFE_DISTANCE = 5000.0f;
+
+  private static final String CONSECUTIVE_THRESHOLD = "CONSECUTIVE_THRESHOLD";
+  private static final int DEFAULT_CONSECUTIVE_THRESHOLD = 3;
+
+  private static final String DOWNSAMPLE_FACTOR = "DOWNSAMPLE_FACTOR";
+  private static final int DEFAULT_DOWNSAMPLE_FACTOR = 8;
+
+  private static final String DEPTH_GRADIENT_THRESHOLD = "DEPTH_GRADIENT_THRESHOLD";
+  private static final float DEFAULT_DEPTH_GRADIENT_THRESHOLD = 200.0f;
+
+  private static final String NAVIGABILITY_THRESHOLD = "NAVIGABILITY_THRESHOLD";
+  private static final int DEFAULT_NAVIGABILITY_THRESHOLD = 3;
+
+  private static final String CONFIDENCE_THRESHOLD = "CONFIDENCE_THRESHOLD";
+  private static final float DEFAULT_CONFIDENCE_THRESHOLD = 0.5f;
+
+  // Logger fragment preferences
+  private static final String LOGGER_RESOLUTION = "LOGGER_RESOLUTION";
+  private static final int DEFAULT_LOGGER_RESOLUTION = 0; // First item in resolution_values array
+
+  private static final String LOGGER_FPS = "LOGGER_FPS";
+  private static final int DEFAULT_LOGGER_FPS = 2; // 15 FPS (third item in fps_values array)
+
+  private static final String LOGGER_SAVE_DESTINATION = "LOGGER_SAVE_DESTINATION";
+  private static final int DEFAULT_LOGGER_SAVE_DESTINATION = 0; // Local Storage
+
+  private static final String LOGGER_IMAGE_SOURCE = "LOGGER_IMAGE_SOURCE";
+  private static final int DEFAULT_LOGGER_IMAGE_SOURCE = 0; // ARCore
 
   private final SharedPreferences preferences;
 
@@ -58,14 +96,6 @@ public class SharedPreferencesManager {
     return preferences.getInt(BAUD_RATE, DEFAULT_BAUD_RATE);
   }
 
-  public int getDevice() {
-    return preferences.getInt(DEVICE, DEFAULT_DEVICE);
-  }
-
-  public int getDriveMode() {
-    return preferences.getInt(DRIVE_MODE, DEFAULT_DRIVE_MODE);
-  }
-
   public int getLogMode() {
     return preferences.getInt(LOG_MODE, DEFAULT_LOG_MODE);
   }
@@ -76,6 +106,14 @@ public class SharedPreferencesManager {
 
   public int getSpeedMode() {
     return preferences.getInt(SPEED_MODE, DEFAULT_SPEED_MODE);
+  }
+
+  public int getSpeedMultiplier() {
+    return preferences.getInt(SPEED_MULTIPLIER, DEFAULT_SPEED_MULTIPLIER);
+  }
+
+  public int getAngularMultiplier() {
+    return preferences.getInt(ANGULAR_MULTIPLIER, DEFAULT_ANGULAR_MULTIPLIER);
   }
 
   public int getNumThreads() {
@@ -167,6 +205,14 @@ public class SharedPreferencesManager {
     preferences.edit().putInt(SPEED_MODE, mode).apply();
   }
 
+  public void setSpeedMultiplier(int multiplier) {
+    preferences.edit().putInt(SPEED_MULTIPLIER, multiplier).apply();
+  }
+
+  public void setAngularMultiplier(int multiplier) {
+    preferences.edit().putInt(ANGULAR_MULTIPLIER, multiplier).apply();
+  }
+
   public void setNumThreads(int numThreads) {
     preferences.edit().putInt(NUM_THREAD, numThreads).apply();
   }
@@ -195,28 +241,7 @@ public class SharedPreferencesManager {
     return preferences.getInt(DELAY, 200);
   }
 
-  public void setProjectLIst(List<ProjectsDataInObject> allProjects) {
-    Gson gson = new Gson();
-    // Convert the List of ProjectsDataInObject to JSON string
-    String json = gson.toJson(allProjects);
-    // Store the JSON string in SharedPreferences
-    preferences.edit().putString(PROJECTS_LIST, json).apply();
-  }
 
-  public ArrayList<ProjectsDataInObject> getProjectList() {
-    Gson gson = new Gson();
-    // Retrieve the JSON string from SharedPreferences
-    String json = preferences.getString(PROJECTS_LIST, null);
-    // Define the type of the object to be deserialized
-    Type type = new TypeToken<ArrayList<ProjectsDataInObject>>() {}.getType();
-    if (gson.fromJson(json, type) != null) {
-      // Deserialize the JSON string to an ArrayList<ProjectsDataInObject>
-      return gson.fromJson(json, type);
-    } else {
-      // If the JSON string is null or cannot be deserialized, return an empty ArrayList
-      return new ArrayList<>();
-    }
-  }
 
   /**
    * Set the current selected map ID
@@ -234,5 +259,239 @@ public class SharedPreferencesManager {
    */
   public String getCurrentMapId() {
     return preferences.getString(CURRENT_MAP_ID, null);
+  }
+
+  /**
+   * Get the selected depth source
+   *
+   * @return The depth source index (0 for ARCore, 1 for TFLite, 2 for ONNX)
+   */
+  public int getDepthSource() {
+    return preferences.getInt(DEPTH_SOURCE, DEFAULT_DEPTH_SOURCE);
+  }
+
+  /**
+   * Set the selected depth source
+   *
+   * @param depthSource The depth source index (0 for ARCore, 1 for TFLite, 2 for ONNX)
+   */
+  public void setDepthSource(int depthSource) {
+    preferences.edit().putInt(DEPTH_SOURCE, depthSource).apply();
+  }
+
+  /**
+   * Get the robot width in meters
+   *
+   * @return The robot width in meters
+   */
+  public float getRobotWidthMeters() {
+    return preferences.getFloat(ROBOT_WIDTH_METERS, DEFAULT_ROBOT_WIDTH_METERS);
+  }
+
+  /**
+   * Set the robot width in meters
+   *
+   * @param widthMeters The robot width in meters
+   */
+  public void setRobotWidthMeters(float widthMeters) {
+    preferences.edit().putFloat(ROBOT_WIDTH_METERS, widthMeters).apply();
+  }
+
+  /**
+   * Get the closer next threshold in millimeters
+   *
+   * @return The closer next threshold in millimeters
+   */
+  public float getCloserNextThreshold() {
+    return preferences.getFloat(CLOSER_NEXT_THRESHOLD, DEFAULT_CLOSER_NEXT_THRESHOLD);
+  }
+
+  /**
+   * Set the closer next threshold in millimeters
+   *
+   * @param thresholdMm The closer next threshold in millimeters
+   */
+  public void setCloserNextThreshold(float thresholdMm) {
+    preferences.edit().putFloat(CLOSER_NEXT_THRESHOLD, thresholdMm).apply();
+  }
+
+  /**
+   * Get the maximum safe distance in millimeters
+   *
+   * @return The maximum safe distance in millimeters
+   */
+  public float getMaxSafeDistance() {
+    return preferences.getFloat(MAX_SAFE_DISTANCE, DEFAULT_MAX_SAFE_DISTANCE);
+  }
+
+  /**
+   * Set the maximum safe distance in millimeters
+   *
+   * @param distanceMm The maximum safe distance in millimeters
+   */
+  public void setMaxSafeDistance(float distanceMm) {
+    preferences.edit().putFloat(MAX_SAFE_DISTANCE, distanceMm).apply();
+  }
+
+  /**
+   * Get the consecutive threshold in pixels
+   *
+   * @return The consecutive threshold in pixels
+   */
+  public int getConsecutiveThreshold() {
+    return preferences.getInt(CONSECUTIVE_THRESHOLD, DEFAULT_CONSECUTIVE_THRESHOLD);
+  }
+
+  /**
+   * Set the consecutive threshold in pixels
+   *
+   * @param threshold The consecutive threshold in pixels
+   */
+  public void setConsecutiveThreshold(int threshold) {
+    preferences.edit().putInt(CONSECUTIVE_THRESHOLD, threshold).apply();
+  }
+
+  /**
+   * Get the downsample factor
+   *
+   * @return The downsample factor
+   */
+  public int getDownsampleFactor() {
+    return preferences.getInt(DOWNSAMPLE_FACTOR, DEFAULT_DOWNSAMPLE_FACTOR);
+  }
+
+  /**
+   * Set the downsample factor
+   *
+   * @param factor The downsample factor
+   */
+  public void setDownsampleFactor(int factor) {
+    preferences.edit().putInt(DOWNSAMPLE_FACTOR, factor).apply();
+  }
+
+  /**
+   * Get the depth gradient threshold in millimeters
+   *
+   * @return The depth gradient threshold in millimeters
+   */
+  public float getDepthGradientThreshold() {
+    return preferences.getFloat(DEPTH_GRADIENT_THRESHOLD, DEFAULT_DEPTH_GRADIENT_THRESHOLD);
+  }
+
+  /**
+   * Set the depth gradient threshold in millimeters
+   *
+   * @param thresholdMm The depth gradient threshold in millimeters
+   */
+  public void setDepthGradientThreshold(float thresholdMm) {
+    preferences.edit().putFloat(DEPTH_GRADIENT_THRESHOLD, thresholdMm).apply();
+  }
+
+  /**
+   * Get the navigability threshold (percentage of obstacles)
+   *
+   * @return The navigability threshold (percentage of obstacles)
+   */
+  public int getNavigabilityThreshold() {
+    return preferences.getInt(NAVIGABILITY_THRESHOLD, DEFAULT_NAVIGABILITY_THRESHOLD);
+  }
+
+  /**
+   * Set the navigability threshold (percentage of obstacles)
+   *
+   * @param threshold The navigability threshold (percentage of obstacles)
+   */
+  public void setNavigabilityThreshold(int threshold) {
+    preferences.edit().putInt(NAVIGABILITY_THRESHOLD, threshold).apply();
+  }
+
+  /**
+   * Get the confidence threshold for depth processing
+   *
+   * @return The confidence threshold (0.0-1.0)
+   */
+  public float getConfidenceThreshold() {
+    return preferences.getFloat(CONFIDENCE_THRESHOLD, DEFAULT_CONFIDENCE_THRESHOLD);
+  }
+
+  /**
+   * Set the confidence threshold for depth processing
+   *
+   * @param threshold The confidence threshold (0.0-1.0)
+   */
+  public void setConfidenceThreshold(float threshold) {
+    preferences.edit().putFloat(CONFIDENCE_THRESHOLD, threshold).apply();
+  }
+
+  /**
+   * Get the selected resolution index for the logger
+   *
+   * @return The resolution index (0-3 corresponding to the resolution_values array)
+   */
+  public int getLoggerResolution() {
+    return preferences.getInt(LOGGER_RESOLUTION, DEFAULT_LOGGER_RESOLUTION);
+  }
+
+  /**
+   * Set the selected resolution index for the logger
+   *
+   * @param resolutionIndex The resolution index (0-3 corresponding to the resolution_values array)
+   */
+  public void setLoggerResolution(int resolutionIndex) {
+    preferences.edit().putInt(LOGGER_RESOLUTION, resolutionIndex).apply();
+  }
+
+  /**
+   * Get the selected FPS index for the logger
+   *
+   * @return The FPS index (0-3 corresponding to the fps_values array)
+   */
+  public int getLoggerFPS() {
+    return preferences.getInt(LOGGER_FPS, DEFAULT_LOGGER_FPS);
+  }
+
+  /**
+   * Set the selected FPS index for the logger
+   *
+   * @param fpsIndex The FPS index (0-3 corresponding to the fps_values array)
+   */
+  public void setLoggerFPS(int fpsIndex) {
+    preferences.edit().putInt(LOGGER_FPS, fpsIndex).apply();
+  }
+
+  /**
+   * Get the selected save destination for the logger
+   *
+   * @return The save destination index (0 for Local Storage, 1 for Google Drive)
+   */
+  public int getLoggerSaveDestination() {
+    return preferences.getInt(LOGGER_SAVE_DESTINATION, DEFAULT_LOGGER_SAVE_DESTINATION);
+  }
+
+  /**
+   * Set the selected save destination for the logger
+   *
+   * @param saveDestinationIndex The save destination index (0 for Local Storage, 1 for Google Drive)
+   */
+  public void setLoggerSaveDestination(int saveDestinationIndex) {
+    preferences.edit().putInt(LOGGER_SAVE_DESTINATION, saveDestinationIndex).apply();
+  }
+
+  /**
+   * Get the selected image source for the logger
+   *
+   * @return The image source index (0 for ARCore, 1 for Camera, 2 for External Camera)
+   */
+  public int getLoggerImageSource() {
+    return preferences.getInt(LOGGER_IMAGE_SOURCE, DEFAULT_LOGGER_IMAGE_SOURCE);
+  }
+
+  /**
+   * Set the selected image source for the logger
+   *
+   * @param imageSourceIndex The image source index (0 for ARCore, 1 for Camera, 2 for External Camera)
+   */
+  public void setLoggerImageSource(int imageSourceIndex) {
+    preferences.edit().putInt(LOGGER_IMAGE_SOURCE, imageSourceIndex).apply();
   }
 }

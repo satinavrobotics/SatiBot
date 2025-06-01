@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.pointGoalNavigation;
+package com.satinavrobotics.satibot.arcore;
 
 import android.graphics.PointF;
 import android.util.Size;

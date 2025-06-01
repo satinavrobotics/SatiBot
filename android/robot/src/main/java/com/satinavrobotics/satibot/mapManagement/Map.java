@@ -50,6 +50,15 @@ public class Map {
         private double altitude;
         private String name;
         private long createdAt;
+        // Local coordinates relative to the first anchor
+        private double localX;
+        private double localY;
+        private double localZ;
+        // Local orientation (quaternion) relative to the first anchor
+        private double localQx;
+        private double localQy;
+        private double localQz;
+        private double localQw;
 
         // Empty constructor required for Firestore
         public Anchor() {
@@ -60,6 +69,52 @@ public class Map {
             this.latitude = latitude;
             this.longitude = longitude;
             this.altitude = altitude;
+            this.name = name;
+            this.createdAt = createdAt;
+            // Default local coordinates to 0
+            this.localX = 0;
+            this.localY = 0;
+            this.localZ = 0;
+            // Default local orientation to identity quaternion
+            this.localQx = 0;
+            this.localQy = 0;
+            this.localQz = 0;
+            this.localQw = 1;
+        }
+
+        public Anchor(String cloudAnchorId, double latitude, double longitude, double altitude,
+                     double localX, double localY, double localZ, String name, long createdAt) {
+            this.cloudAnchorId = cloudAnchorId;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.altitude = altitude;
+            this.localX = localX;
+            this.localY = localY;
+            this.localZ = localZ;
+            this.name = name;
+            this.createdAt = createdAt;
+            // Default local orientation to identity quaternion
+            this.localQx = 0;
+            this.localQy = 0;
+            this.localQz = 0;
+            this.localQw = 1;
+        }
+
+        public Anchor(String cloudAnchorId, double latitude, double longitude, double altitude,
+                     double localX, double localY, double localZ,
+                     double localQx, double localQy, double localQz, double localQw,
+                     String name, long createdAt) {
+            this.cloudAnchorId = cloudAnchorId;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.altitude = altitude;
+            this.localX = localX;
+            this.localY = localY;
+            this.localZ = localZ;
+            this.localQx = localQx;
+            this.localQy = localQy;
+            this.localQz = localQz;
+            this.localQw = localQw;
             this.name = name;
             this.createdAt = createdAt;
         }
@@ -111,6 +166,72 @@ public class Map {
         public void setCreatedAt(long createdAt) {
             this.createdAt = createdAt;
         }
+
+        public double getLocalX() {
+            return localX;
+        }
+
+        public void setLocalX(double localX) {
+            this.localX = localX;
+        }
+
+        public double getLocalY() {
+            return localY;
+        }
+
+        public void setLocalY(double localY) {
+            this.localY = localY;
+        }
+
+        public double getLocalZ() {
+            return localZ;
+        }
+
+        public void setLocalZ(double localZ) {
+            this.localZ = localZ;
+        }
+
+        public double getLocalQx() {
+            return localQx;
+        }
+
+        public void setLocalQx(double localQx) {
+            this.localQx = localQx;
+        }
+
+        public double getLocalQy() {
+            return localQy;
+        }
+
+        public void setLocalQy(double localQy) {
+            this.localQy = localQy;
+        }
+
+        public double getLocalQz() {
+            return localQz;
+        }
+
+        public void setLocalQz(double localQz) {
+            this.localQz = localQz;
+        }
+
+        public double getLocalQw() {
+            return localQw;
+        }
+
+        public void setLocalQw(double localQw) {
+            this.localQw = localQw;
+        }
+
+        /**
+         * Calculates the distance to the origin (0,0,0) in local coordinates.
+         * This is useful for finding the closest anchor to the origin.
+         *
+         * @return The Euclidean distance to the origin
+         */
+        public double distanceToOrigin() {
+            return Math.sqrt(localX * localX + localY * localY + localZ * localZ);
+        }
     }
 
     public String getId() {
@@ -157,6 +278,17 @@ public class Map {
         return anchors != null ? anchors.size() : 0;
     }
 
+    /**
+     * Setter for anchorCount required by Firestore deserialization.
+     * This method is only used by Firestore and doesn't actually set anything
+     * since the count is derived from the anchors list size.
+     *
+     * @param count The count value from Firestore (ignored)
+     */
+    public void setAnchorCount(int count) {
+        // Ignore the input value as the count is derived from the list size
+    }
+
     public long getCreatedAt() {
         return createdAt;
     }
@@ -197,6 +329,17 @@ public class Map {
 
     public int getWaypointCount() {
         return waypoints != null ? waypoints.size() : 0;
+    }
+
+    /**
+     * Setter for waypointCount required by Firestore deserialization.
+     * This method is only used by Firestore and doesn't actually set anything
+     * since the count is derived from the waypoints list size.
+     *
+     * @param count The count value from Firestore (ignored)
+     */
+    public void setWaypointCount(int count) {
+        // Ignore the input value as the count is derived from the list size
     }
 
     public boolean isSelected() {

@@ -15,13 +15,12 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseUser;
-import java.util.ArrayList;
-import org.openbot.R;
-import org.openbot.databinding.FragmentProfileBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentProfileBinding;
 
 import com.satinavrobotics.satibot.env.SharedPreferencesManager;
 import com.satinavrobotics.satibot.googleServices.GoogleServices;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
+import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
 
 public class ProfileFragment extends Fragment {
 
@@ -97,7 +96,6 @@ public class ProfileFragment extends Fragment {
         public void onSignOutSuccess() {
           binding.signOutScreen.setVisibility(View.VISIBLE);
           binding.profileSettings.setVisibility(View.GONE);
-          sharedPreferencesManager.setProjectLIst(new ArrayList<>());
         }
 
         @Override

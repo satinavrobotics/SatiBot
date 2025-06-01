@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.pointGoalNavigation;
+package com.satinavrobotics.satibot.arcore;
 
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;

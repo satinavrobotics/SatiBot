@@ -98,20 +98,6 @@ public class AudioPlayer {
     }
   }
 
-  public void playDriveMode(String voice, Enums.DriveMode driveMode) {
-    switch (driveMode) {
-      case DUAL:
-        play(voice, "dual_drive_control.mp3");
-        break;
-      case GAME:
-        play(voice, "video_game_control.mp3");
-        break;
-      case JOYSTICK:
-        play(voice, "joystick_control.mp3");
-        break;
-    }
-  }
-
   public void playSpeedMode(String voice, Enums.SpeedMode speedMode) {
     switch (speedMode) {
       case SLOW:

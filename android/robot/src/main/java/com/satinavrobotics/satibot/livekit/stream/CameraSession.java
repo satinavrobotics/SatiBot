@@ -1,4 +1,4 @@
-package com.satinavrobotics.satibot.robot;
+package com.satinavrobotics.satibot.livekit.stream;
 
 //
 // Source code recreated from a .class file by IntelliJ IDEA

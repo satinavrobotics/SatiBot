@@ -48,6 +48,7 @@
 
     <string name="control">Control</string>
     <string name="battery">Battery</string>
+    <string name="battery_percentage">**%</string>
     <string name="speed">Speed (l,r)</string>
     <string name="sonar">Sonar</string>
     <string name="control_info">***,***</string>
@@ -141,24 +142,20 @@
         <item>Joystick</item>
     </string-array>
 
-    <string-array name="preview_resolutions">
-        <item>Low</item>
-        <item>Medium</item>
-        <item>High</item>
+    <string-array name="resolution_values">
+        <item>256 x 256</item>
+        <item>512 x 512</item>
+        <item>252 x 336</item>
+        <item>480 x 640</item>
     </string-array>
 
     <string-array name="save_data">
         <item>Local Storage</item>
         <item>Google Drive</item>
-        <item>Local Server</item>
     </string-array>
 
     <!-- TODO: Remove or change this placeholder text -->
-    <string-array name="stream_server">
-        <item>WebRTC</item>
-        <item>RTSP</item>
-        <item>LiveKit</item>
-    </string-array>
+
     <string-array name="connection_type">
         <item>Bluetooth</item>
         <item>USB</item>
@@ -170,12 +167,8 @@
         <item>Fast</item>
     </string-array>
     <string name="profile">Profile</string>
-    <string name="projects">Projects</string>
-    <string name="scanner">Scanner</string>
+    <string name="robot_info">Robot Info</string>
     <string name="home">Home</string>
-    <string name="scan_qr_code">Scan QR Code</string>
-    <string name="playground">Playground</string>
-    <string name="text_on_qr_screen">Place QR code inside the frame to scan. Please avoid shake to get results quickly.</string>
     <string name="edit_profile">Edit Profile</string>
     <string name="logout">Logout</string>
     <string name="auto_mode">Auto Mode</string>
@@ -202,11 +195,16 @@
     <string name="wheel_odometry">Wheel Odometry</string>
     <string name="readings">Readings</string>
     <string name="lights_slider">lights slider</string>
+    <string name="speed_multiplier">Linear Speed %1$d</string>
+    <string name="speed_multiplier_slider">speed multiplier slider</string>
+    <string name="angular_multiplier">Angular Speed %1$d</string>
+    <string name="angular_multiplier_slider">angular multiplier slider</string>
     <string name="indicator_leds">Indicator LEDs</string>
     <string name="back_leds">Back LEDs</string>
     <string name="status_leds">Status LEDs</string>
     <string name="front_leds">Front LEDs</string>
     <string name="usb">USB</string>
+    <string name="livekit">LiveKit</string>
     <string name="cancel">Cancel</string>
     <string name="local_control">Local Control</string>
     <string name="debug">Debug</string>
@@ -224,4 +222,23 @@
     <string name="pwm_format">%1$s,%2$s</string>
     <string name="wheel_count">Wheel Count (l,r)</string>
     <string name="wheel_count_format">%1$s,%2$s</string>
+
+    <string-array name="depth_sources">
+        <item>ARCore</item>
+        <item>TensorFlow Lite</item>
+        <item>ONNX Runtime</item>
+    </string-array>
+
+    <string-array name="image_sources">
+        <item>ARCore</item>
+        <item>Camera</item>
+        <item>External Camera</item>
+    </string-array>
+
+    <string-array name="fps_values">
+        <item>5 FPS</item>
+        <item>10 FPS</item>
+        <item>15 FPS</item>
+        <item>30 FPS</item>
+    </string-array>
 </resources>

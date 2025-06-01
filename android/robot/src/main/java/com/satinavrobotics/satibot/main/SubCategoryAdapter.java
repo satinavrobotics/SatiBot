@@ -10,9 +10,9 @@ import com.bumptech.glide.Glide;
 import com.google.android.material.imageview.ShapeableImageView;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
-import org.openbot.databinding.ItemSubCategoryBinding;
+import com.satinavrobotics.satibot.databinding.ItemSubCategoryBinding;
 
-import com.satinavrobotics.satibot.model.SubCategory;
+import com.satinavrobotics.satibot.main.model.SubCategory;
 
 public class SubCategoryAdapter extends RecyclerView.Adapter<SubCategoryAdapter.ViewHolder> {
 

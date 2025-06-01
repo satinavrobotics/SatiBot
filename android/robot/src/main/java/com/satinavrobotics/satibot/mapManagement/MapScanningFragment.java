@@ -45,6 +45,7 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
@@ -53,8 +54,8 @@ import com.google.android.material.snackbar.Snackbar;
 import java.util.Collection;
 import java.util.List;
 
-import org.openbot.R;
-import org.openbot.databinding.FragmentMapScanningBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentMapScanningBinding;
 
 import com.satinavrobotics.satibot.env.CameraPermissionHelper;
 import com.satinavrobotics.satibot.env.DisplayRotationHelper;
@@ -66,6 +67,7 @@ import com.satinavrobotics.satibot.mapManagement.rendering.PointCloudRenderer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.UUID;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -222,8 +224,9 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
         saveButton.setOnClickListener(v -> showSaveMapDialog());
         cancelButton.setOnClickListener(v -> showCancelConfirmationDialog());
 
-        // Update UI
-        updateAnchorCountText();
+        // Initialize UI with zero anchors
+        anchorCountText.setText("Anchors: 0/" + mapScanningManager.getMaxAnchors());
+        saveButton.setEnabled(false);
     }
 
     @Override
@@ -870,15 +873,21 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
             if (!cloudAnchorState.isError()) {
                 // Only process if we have a valid cloud ID
                 if (cloudAnchorId != null && anchor != null) {
-                    // The anchor is already added to the manager in the callback
-                    // Just update the UI
-                    updateAnchorCountText(); // This will also update the save button state
-                    // No need to show success message
-
-                    // Remove from pending anchors list since it's now hosted
+                    // Remove from pending anchors list first since it's now hosted
                     synchronized (anchorLock) {
                         pendingAnchors.remove(anchor);
                     }
+
+                    // The anchor is already added to the manager in the callback
+                    // Directly update the UI with the correct count
+                    int totalCount = mapScanningManager.getAnchorCount();
+                    int maxAnchors = mapScanningManager.getMaxAnchors();
+                    anchorCountText.setText("Anchors: " + totalCount + "/" + maxAnchors);
+                    saveButton.setEnabled(totalCount > 0);
+
+                    Timber.d("Updated anchor count after hosting - Hosted: %d, Pending: %d, Total: %d",
+                            mapScanningManager.getAnchorCount(), pendingAnchors.size(), totalCount);
+                    // No need to show success message
                 }
             } else {
                 // Don't show error message
@@ -894,6 +903,10 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
     }
 
     private void handleTap(Frame frame, TrackingState cameraTrackingState) {
+        // Log current anchor counts before processing tap
+        Timber.d("handleTap - Current counts before processing: Hosted: %d, Pending: %d",
+                mapScanningManager.getAnchorCount(), pendingAnchors.size());
+
         // Skip tap handling if camera is not tracking
         if (cameraTrackingState != TrackingState.TRACKING) {
             // Don't show any message, just return
@@ -969,8 +982,32 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
 
                         // Add to pending anchors list to visualize
                         synchronized (anchorLock) {
+                            // Clear any existing pending anchors to ensure we only have one
+                            if (pendingAnchors.size() > 0) {
+                                Timber.d("Clearing existing pending anchors before adding new one");
+                                for (Anchor anchor : pendingAnchors) {
+                                    anchor.detach();
+                                }
+                                pendingAnchors.clear();
+                            }
+
                             pendingAnchors.add(newAnchor);
+                            Timber.d("Added new anchor to pendingAnchors. Current size: %d", pendingAnchors.size());
                         }
+
+                        // Log the current state before updating UI
+                        Timber.d("Before updateAnchorCountText - Hosted: %d, Pending: %d",
+                                mapScanningManager.getAnchorCount(), pendingAnchors.size());
+
+                        // Update the anchor count UI to include this new pending anchor
+                        int totalCount = mapScanningManager.getAnchorCount() + pendingAnchors.size();
+                        int maxAnchors = mapScanningManager.getMaxAnchors();
+
+                        // Directly update the UI with the correct count
+                        requireActivity().runOnUiThread(() -> {
+                            anchorCountText.setText("Anchors: " + totalCount + "/" + maxAnchors);
+                            saveButton.setEnabled(totalCount > 0);
+                        });
 
                         // No need to show guidance message
 
@@ -997,16 +1034,50 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
     }
 
     private void updateAnchorCountText() {
-        int anchorCount = mapScanningManager.getAnchorCount();
+        // Count both hosted anchors and pending anchors
+        int hostedCount = mapScanningManager.getAnchorCount();
+        int pendingCount;
+        synchronized (anchorLock) {
+            pendingCount = pendingAnchors.size();
+            // Log the pending anchors for debugging
+            Timber.d("Pending anchors list size: %d", pendingCount);
+            for (Anchor anchor : pendingAnchors) {
+                Timber.d("Pending anchor: %s, tracking state: %s", anchor, anchor.getTrackingState());
+            }
+        }
+        int totalCount = hostedCount + pendingCount;
         int maxAnchors = mapScanningManager.getMaxAnchors();
-        anchorCountText.setText("Anchors: " + anchorCount + "/" + maxAnchors);
 
-        // Enable save button if there are anchors
-        saveButton.setEnabled(anchorCount > 0);
+        // Update the UI with the total count
+        anchorCountText.setText("Anchors: " + totalCount + "/" + maxAnchors);
+
+        // Enable save button if there are any anchors (hosted or pending)
+        // We only need one anchor to save a map
+        saveButton.setEnabled(totalCount > 0);
+
+        Timber.d("Updated anchor count - Hosted: %d, Pending: %d, Total: %d",
+                hostedCount, pendingCount, totalCount);
+
+        // Log the hosted anchors for debugging
+        List<MapScanningManager.AnchorWithCloudId> hostedAnchors = mapScanningManager.getHostedAnchors();
+        Timber.d("Hosted anchors list size: %d", hostedAnchors.size());
+        for (MapScanningManager.AnchorWithCloudId anchorWithCloudId : hostedAnchors) {
+            Timber.d("Hosted anchor: %s, cloud ID: %s, tracking state: %s",
+                    anchorWithCloudId.getAnchor(),
+                    anchorWithCloudId.getCloudAnchorId(),
+                    anchorWithCloudId.getAnchor().getTrackingState());
+        }
     }
 
     private void showSaveMapDialog() {
-        if (mapScanningManager.getAnchorCount() == 0) {
+        // Check if we have any anchors (hosted or pending)
+        int hostedCount = mapScanningManager.getAnchorCount();
+        int pendingCount;
+        synchronized (anchorLock) {
+            pendingCount = pendingAnchors.size();
+        }
+
+        if (hostedCount == 0 && pendingCount == 0) {
             snackbarHelper.showError(requireActivity(), "Please add at least one anchor before saving");
             return;
         }
@@ -1025,9 +1096,15 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
         mapNameInput.setText(defaultMapName);
         mapNameInput.selectAll();
 
+        // Calculate total anchor count (hosted + pending)
+        int totalAnchorCount = mapScanningManager.getAnchorCount();
+        synchronized (anchorLock) {
+            totalAnchorCount += pendingAnchors.size();
+        }
+
         AlertDialog dialog = new AlertDialog.Builder(requireContext())
                 .setTitle("Save Map")
-                .setMessage("You are about to save a map with " + mapScanningManager.getAnchorCount() + " anchors.")
+                .setMessage("You are about to save a map with " + totalAnchorCount + " anchors.")
                 .setView(dialogView)
                 .setPositiveButton("Save", null) // Set in the show() call to prevent auto-dismiss
                 .setNegativeButton("Cancel", null)
@@ -1054,10 +1131,50 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
             return;
         }
 
-        // Check if we have any anchors to save
-        if (mapScanningManager.getAnchorCount() == 0) {
+        // Check if we have any anchors to save (hosted or pending)
+        int hostedCount = mapScanningManager.getAnchorCount();
+        int pendingCount;
+        synchronized (anchorLock) {
+            pendingCount = pendingAnchors.size();
+        }
+
+        if (hostedCount == 0 && pendingCount == 0) {
             snackbarHelper.showError(requireActivity(), "No anchors to save. Please place at least one anchor.");
             return;
+        }
+
+        // If we have pending anchors but no hosted anchors, host them now
+        if (hostedCount == 0 && pendingCount > 0) {
+            Timber.d("Auto-hosting %d pending anchors before saving", pendingCount);
+            snackbarHelper.showMessage(requireActivity(), "Preparing anchors for saving...");
+
+            // Host all pending anchors
+            synchronized (anchorLock) {
+                for (Anchor anchor : new ArrayList<>(pendingAnchors)) {
+                    if (anchor.getTrackingState() == TrackingState.TRACKING) {
+                        // Host the anchor
+                        mapScanningManager.hostCloudAnchor(anchor, (cloudAnchorId, cloudAnchorState, hostedAnchor) -> {
+                            Timber.d("Auto-hosted anchor with result: %s, id: %s", cloudAnchorState, cloudAnchorId);
+                            // Remove from pending anchors when successfully hosted
+                            if (cloudAnchorState == CloudAnchorState.SUCCESS && cloudAnchorId != null) {
+                                synchronized (anchorLock) {
+                                    pendingAnchors.remove(hostedAnchor);
+                                }
+                                // Directly update the UI with the correct count
+                                requireActivity().runOnUiThread(() -> {
+                                    int totalCount = mapScanningManager.getAnchorCount();
+                                    int maxAnchors = mapScanningManager.getMaxAnchors();
+                                    anchorCountText.setText("Anchors: " + totalCount + "/" + maxAnchors);
+                                    saveButton.setEnabled(totalCount > 0);
+
+                                    Timber.d("Updated anchor count after auto-hosting - Hosted: %d, Pending: %d, Total: %d",
+                                            mapScanningManager.getAnchorCount(), pendingAnchors.size(), totalCount);
+                                });
+                            }
+                        });
+                    }
+                }
+            }
         }
 
         snackbarHelper.showMessage(requireActivity(), "Saving map...");
@@ -1077,31 +1194,206 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
 
         // Add all anchors to the map
         List<MapScanningManager.AnchorWithCloudId> hostedAnchors = mapScanningManager.getHostedAnchors();
+        MapScanningManager.AnchorWithCloudId originAnchor = mapScanningManager.getOriginAnchor();
+
+        // If we don't have an origin anchor yet but have pending anchors, use the first pending anchor as origin
+        Pose originPose = null;
+        if (originAnchor == null) {
+            synchronized (anchorLock) {
+                if (!pendingAnchors.isEmpty()) {
+                    Anchor firstPendingAnchor = pendingAnchors.get(0);
+                    if (firstPendingAnchor.getTrackingState() == TrackingState.TRACKING) {
+                        originPose = firstPendingAnchor.getPose();
+                        Timber.d("Using first pending anchor as origin with pose: %s", originPose);
+                    }
+                }
+            }
+        } else {
+            originPose = originAnchor.getPose();
+        }
+
+        // Process hosted anchors
+        int anchorIndex = 0;
         for (int i = 0; i < hostedAnchors.size(); i++) {
             MapScanningManager.AnchorWithCloudId anchorWithCloudId = hostedAnchors.get(i);
             Pose pose = anchorWithCloudId.getPose();
+            anchorIndex++;
 
-            // Create a new anchor object
+            // Calculate local coordinates relative to the origin
+            double localX = 0;
+            double localY = 0;
+            double localZ = 0;
+
+            if (originAnchor != null) {
+                // If this is the origin anchor, local coordinates are (0,0,0)
+                if (anchorWithCloudId.getCloudAnchorId().equals(originAnchor.getCloudAnchorId())) {
+                    Timber.d("Origin anchor: %s, setting local coordinates to (0,0,0)",
+                            anchorWithCloudId.getCloudAnchorId());
+                } else {
+                    // Calculate local coordinates
+                    float[] localCoords = mapScanningManager.calculateLocalCoordinates(anchorWithCloudId);
+                    if (localCoords != null) {
+                        localX = localCoords[0];
+                        localY = localCoords[1];
+                        localZ = localCoords[2];
+                        Timber.d("Anchor %s local coordinates: (%f, %f, %f)",
+                                anchorWithCloudId.getCloudAnchorId(), localX, localY, localZ);
+                    } else {
+                        Timber.w("Failed to calculate local coordinates for anchor %s",
+                                anchorWithCloudId.getCloudAnchorId());
+                    }
+                }
+            } else if (originPose != null) {
+                // Calculate local coordinates relative to the first pending anchor
+                Pose relativePose = originPose.inverse().compose(pose);
+                float[] translation = new float[3];
+                relativePose.getTranslation(translation, 0);
+                localX = translation[0];
+                localY = translation[1];
+                localZ = translation[2];
+                Timber.d("Calculated local coordinates relative to first pending anchor: (%f, %f, %f)",
+                        localX, localY, localZ);
+            } else {
+                Timber.w("No origin found, using (0,0,0) for all local coordinates");
+            }
+
+            // Calculate local orientation
+            double localQx = 0;
+            double localQy = 0;
+            double localQz = 0;
+            double localQw = 1; // Default to identity quaternion
+
+            if (originAnchor != null && !anchorWithCloudId.getCloudAnchorId().equals(originAnchor.getCloudAnchorId())) {
+                // Calculate local orientation
+                float[] localRotation = mapScanningManager.calculateLocalOrientation(anchorWithCloudId);
+                if (localRotation != null) {
+                    localQx = localRotation[0];
+                    localQy = localRotation[1];
+                    localQz = localRotation[2];
+                    localQw = localRotation[3];
+                    Timber.d("Anchor %s local orientation: (%f, %f, %f, %f)",
+                            anchorWithCloudId.getCloudAnchorId(), localQx, localQy, localQz, localQw);
+                } else {
+                    Timber.w("Failed to calculate local orientation for anchor %s",
+                            anchorWithCloudId.getCloudAnchorId());
+                }
+            } else if (originPose != null) {
+                // Calculate local orientation relative to the first pending anchor
+                Pose relativePose = originPose.inverse().compose(pose);
+                float[] rotation = new float[4];
+                relativePose.getRotationQuaternion(rotation, 0);
+                localQx = rotation[0];
+                localQy = rotation[1];
+                localQz = rotation[2];
+                localQw = rotation[3];
+                Timber.d("Calculated local orientation relative to first pending anchor: (%f, %f, %f, %f)",
+                        localQx, localQy, localQz, localQw);
+            }
+
+            // Create a new anchor object with local coordinates and orientation
             Map.Anchor anchor = new Map.Anchor(
                     anchorWithCloudId.getCloudAnchorId(),
                     pose.tx(),
                     pose.ty(),
                     pose.tz(),
-                    "Anchor " + (i + 1),
+                    localX,
+                    localY,
+                    localZ,
+                    localQx,
+                    localQy,
+                    localQz,
+                    localQw,
+                    "Anchor " + anchorIndex,
                     currentTime
             );
 
             map.addAnchor(anchor);
         }
 
+        // Process pending anchors that haven't been hosted yet
+        synchronized (anchorLock) {
+            for (Anchor pendingAnchor : pendingAnchors) {
+                if (pendingAnchor.getTrackingState() == TrackingState.TRACKING) {
+                    Pose pose = pendingAnchor.getPose();
+                    anchorIndex++;
+
+                    // Calculate local coordinates relative to the origin
+                    double localX = 0;
+                    double localY = 0;
+                    double localZ = 0;
+
+                    if (originPose != null) {
+                        // Calculate local coordinates relative to the origin
+                        Pose relativePose = originPose.inverse().compose(pose);
+                        float[] translation = new float[3];
+                        relativePose.getTranslation(translation, 0);
+                        localX = translation[0];
+                        localY = translation[1];
+                        localZ = translation[2];
+                        Timber.d("Pending anchor local coordinates: (%f, %f, %f)",
+                                localX, localY, localZ);
+                    } else if (pose.equals(originPose)) {
+                        // This is the origin anchor
+                        Timber.d("This pending anchor is the origin, setting local coordinates to (0,0,0)");
+                    } else {
+                        Timber.w("No origin found for pending anchor, using (0,0,0)");
+                    }
+
+                    // For pending anchors, we don't have a cloud ID yet, so use a temporary one
+                    String tempCloudId = "pending_" + UUID.randomUUID().toString();
+
+                    // Calculate local orientation
+                    double localQx = 0;
+                    double localQy = 0;
+                    double localQz = 0;
+                    double localQw = 1; // Default to identity quaternion
+
+                    if (originPose != null) {
+                        // Calculate local orientation relative to the origin
+                        Pose relativePose = originPose.inverse().compose(pose);
+                        float[] rotation = new float[4];
+                        relativePose.getRotationQuaternion(rotation, 0);
+                        localQx = rotation[0];
+                        localQy = rotation[1];
+                        localQz = rotation[2];
+                        localQw = rotation[3];
+                        Timber.d("Pending anchor local orientation: (%f, %f, %f, %f)",
+                                localQx, localQy, localQz, localQw);
+                    }
+
+                    // Create a new anchor object with local coordinates and orientation
+                    Map.Anchor anchor = new Map.Anchor(
+                            tempCloudId,
+                            pose.tx(),
+                            pose.ty(),
+                            pose.tz(),
+                            localX,
+                            localY,
+                            localZ,
+                            localQx,
+                            localQy,
+                            localQz,
+                            localQw,
+                            "Anchor " + anchorIndex + " (Pending)",
+                            currentTime
+                    );
+
+                    map.addAnchor(anchor);
+                }
+            }
+        }
+
         // Log the map data before saving
         Timber.d("Saving map with %d anchors", map.getAnchors().size());
         for (Map.Anchor anchor : map.getAnchors()) {
-            Timber.d("Anchor: id=%s, position=(%f, %f, %f)",
+            Timber.d("Anchor: id=%s, global=(%f, %f, %f), local=(%f, %f, %f)",
                     anchor.getCloudAnchorId(),
                     anchor.getLatitude(),
                     anchor.getLongitude(),
-                    anchor.getAltitude());
+                    anchor.getAltitude(),
+                    anchor.getLocalX(),
+                    anchor.getLocalY(),
+                    anchor.getLocalZ());
         }
 
         Timber.d("Saving NOW");
@@ -1123,8 +1415,8 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
                             Snackbar.LENGTH_INDEFINITE);
 
                     successSnackbar.setAction("OK", v -> {
-                        // Navigate back to the map management fragment when user dismisses the message
-                        Navigation.findNavController(requireView()).popBackStack();
+                        // Navigate directly to the map management fragment instead of using popBackStack
+                        Navigation.findNavController(requireView()).navigate(R.id.mapManagementFragment);
                     });
 
                     successSnackbar.show();
@@ -1153,13 +1445,17 @@ public class MapScanningFragment extends Fragment implements GLSurfaceView.Rende
                         }
                         mapScanningManager.clear();
 
-                        // Navigate back
-                        Navigation.findNavController(requireView()).popBackStack();
+                        // Navigate directly to the map management fragment instead of using popBackStack
+                        // This prevents navigation issues when returning to this fragment
+                        Navigation.findNavController(requireView())
+                                .navigate(R.id.mapManagementFragment);
                     })
                     .setNegativeButton("No, Keep Scanning", null)
                     .show();
         } else {
-            Navigation.findNavController(requireView()).popBackStack();
+            // Navigate directly to the map management fragment instead of using popBackStack
+            Navigation.findNavController(requireView())
+                    .navigate(R.id.mapManagementFragment);
         }
     }
 

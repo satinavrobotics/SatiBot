@@ -44,7 +44,7 @@ Hier können Sie die Berechtigungen der App überprüfen und bei Bedarf anpassen
 
 #### Video-Streaming
 
-Sie können zwischen `WebRTC` und `RTSP` für das Streaming von Videos auf ein externes Gerät wählen. Die Telefon-Controller-App und der Node-js-Server müssen beide auf `WebRTC` eingestellt sein. Der Python-Controller erwartet, dass der Stream auf `RTSP` eingestellt ist.
+Die App verwendet `LiveKit` für das Streaming von Videos auf externe Geräte.
 
 #### Bluetooth-Verbindung
 

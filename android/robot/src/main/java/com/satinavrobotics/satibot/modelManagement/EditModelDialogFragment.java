@@ -19,8 +19,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.openbot.R;
-import org.openbot.databinding.DialogEditModelBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.DialogEditModelBinding;
 
 import com.satinavrobotics.satibot.googleServices.GoogleServices;
 import com.satinavrobotics.satibot.main.OnItemClickListener;

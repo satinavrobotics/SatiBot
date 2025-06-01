@@ -5,9 +5,9 @@
         android:title="@string/home"
         android:icon="@drawable/ic_home"/>
     <item
-        android:id="@+id/projectsFragment"
-        android:title="@string/projects"
-        android:icon="@drawable/ic_blockly_projects" />
+        android:id="@+id/robotInfoFragment"
+        android:title="@string/robot_info"
+        android:icon="@drawable/ic_openbot_space_large" />
     <item
         android:id="@+id/profileFragment"
         android:title="@string/profile"

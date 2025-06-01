@@ -5,7 +5,7 @@ import android.widget.Toast;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.SwitchPreferenceCompat;
-import org.openbot.R;
+import com.satinavrobotics.satibot.R;
 
 import com.satinavrobotics.satibot.vehicle.Vehicle;
 

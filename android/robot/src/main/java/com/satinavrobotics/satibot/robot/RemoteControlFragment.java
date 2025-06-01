@@ -5,7 +5,6 @@ import static com.satinavrobotics.satibot.utils.Enums.SpeedMode;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Environment;
@@ -21,8 +20,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.navigation.Navigation;
-import com.github.anastr.speedviewlib.components.Section;
-import com.google.android.material.internal.ViewUtils;
 import com.google.ar.core.Pose;
 import com.google.ar.core.TrackingFailureReason;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
@@ -43,24 +40,29 @@ import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
 import org.json.JSONObject;
 import com.satinavrobotics.satibot.R;
-import com.satinavrobotics.satibot.common.LiveKitControlsFragment;
+import com.satinavrobotics.satibot.arcore.ArCoreHandler;
 import com.satinavrobotics.satibot.databinding.FragmentFreeRoamBinding;
 
 import com.satinavrobotics.satibot.env.ImageUtils;
-import com.satinavrobotics.satibot.env.LiveKitConnection;
 import com.satinavrobotics.satibot.env.StatusManager;
 import com.satinavrobotics.satibot.googleServices.GoogleServices;
+import com.satinavrobotics.satibot.livekit.LiveKitServer;
+import com.satinavrobotics.satibot.livekit.stream.ArCameraProvider;
+import com.satinavrobotics.satibot.livekit.stream.ArCameraSession;
+import com.satinavrobotics.satibot.livekit.stream.ExternalCameraSession;
 import com.satinavrobotics.satibot.logging.LocationService;
-import com.satinavrobotics.satibot.pointGoalNavigation.ArCoreListener;
-import com.satinavrobotics.satibot.pointGoalNavigation.CameraIntrinsics;
-import com.satinavrobotics.satibot.pointGoalNavigation.ImageFrame;
-import com.satinavrobotics.satibot.pointGoalNavigation.InfoDialogFragment;
-import com.satinavrobotics.satibot.pointGoalNavigation.PermissionDialogFragment;
-import com.satinavrobotics.satibot.projects.GoogleSignInCallback;
-import com.satinavrobotics.satibot.utils.ConnectionUtils;
+import com.satinavrobotics.satibot.arcore.ArCoreListener;
+import com.satinavrobotics.satibot.arcore.CameraIntrinsics;
+import com.satinavrobotics.satibot.arcore.ImageFrame;
+import com.satinavrobotics.satibot.arcore.InfoDialogFragment;
+import com.satinavrobotics.satibot.arcore.PermissionDialogFragment;
 import com.satinavrobotics.satibot.utils.Constants;
-import com.satinavrobotics.satibot.utils.Enums;
 import com.satinavrobotics.satibot.utils.PermissionUtils;
+
+import io.livekit.android.renderer.SurfaceViewRenderer;
+import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
+import com.satinavrobotics.satibot.utils.ConnectionUtils;
+import com.satinavrobotics.satibot.utils.Enums;
 
 import org.zeroturnaround.zip.ZipUtil;
 import org.zeroturnaround.zip.commons.FileUtils;
@@ -69,10 +71,9 @@ import io.livekit.android.room.track.video.CameraCapturerUtils;
 import livekit.org.webrtc.VideoFrame;
 import timber.log.Timber;
 
-public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreListener {
+public class RemoteControlFragment extends ControlsFragment implements ArCoreListener {
 
   private FragmentFreeRoamBinding binding;
-  private LiveKitConnection liveKitConnection;
   private ArCoreHandler arCore;
   private boolean isPermissionRequested = false;
 
@@ -80,8 +81,6 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
 
   private ArCameraSession arCameraSession;
   private ExternalCameraSession externalCameraSession;
-
-  private StatusManager statusManager;
 
   // LOGGING
   private Handler loggingHandler;
@@ -93,6 +92,10 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   private boolean loggingCanceled;
   private static final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
+  // LiveKit functionality
+  private LiveKitServer liveKitServer;
+  private SurfaceViewRenderer videoRenderer;
+  private ActivityResultLauncher<String[]> requestPermissionLauncher;
 
   @Override
   public void onCreate(Bundle savedInstanceState) {
@@ -122,18 +125,25 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     Intent serviceIntent = new Intent(requireActivity(), LocationService.class);
       requireContext().startService(serviceIntent);
 
-      liveKitConnection = LiveKitConnection.getInstance(requireContext());
-
     Handler handlerMain = new Handler(Looper.getMainLooper());
     arCore = new ArCoreHandler(requireContext(), binding.surfaceView, handlerMain);
     arCameraSession.setArCoreHandler(arCore);
 
     //externalCameraSession.startSession();
 
-    statusManager = StatusManager.getInstance();
-
     // Set up anchor resolution listener
     arCore.setAnchorResolutionListener(this::updateResolvedCountText);
+
+    // Initialize LiveKit functionality
+    liveKitServer = LiveKitServer.getInstance(requireContext());
+    requestPermissionLauncher = liveKitServer.createPermissionLauncher(this);
+
+    // Setup video renderer after view is ready (only if not already set up)
+    binding.getRoot().post(() -> {
+      if (videoRenderer == null) {
+        videoRenderer = liveKitServer.setupVideoRenderer(this);
+      }
+    });
 
     googleServices = new GoogleServices(requireActivity(), requireContext(), new GoogleSignInCallback() {
       @Override
@@ -147,8 +157,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     });
 
 
-    binding.voltageInfo.setText(getString(R.string.voltageInfo, "--.-"));
-    binding.sonarInfo.setText(getString(R.string.distanceInfo, "---"));
+
     if (vehicle.getConnectionType().equals("USB")) {
       binding.usbToggle.setVisibility(View.VISIBLE);
       binding.bleToggle.setVisibility(View.GONE);
@@ -158,32 +167,6 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     }
 
     setSpeedMode(SpeedMode.getByID(preferencesManager.getSpeedMode()));
-    initLiveKitServer();
-
-    binding.controllerContainer.speedMode.setOnClickListener(
-        v ->
-            setSpeedMode(
-                Enums.toggleSpeed(
-                    Enums.Direction.CYCLIC.getValue(),
-                    SpeedMode.getByID(preferencesManager.getSpeedMode()))));
-
-    binding.speed.getSections().clear();
-    binding.speed.addSections(
-        new Section(
-            0f,
-            0.7f,
-            getResources().getColor(R.color.green),
-            ViewUtils.dpToPx(requireContext(), 24)),
-        new Section(
-            0.7f,
-            0.8f,
-            getResources().getColor(R.color.yellow),
-            ViewUtils.dpToPx(requireContext(), 24)),
-        new Section(
-            0.8f,
-            1.0f,
-            getResources().getColor(R.color.red),
-            ViewUtils.dpToPx(requireContext(), 24)));
 
     mViewModel
         .getUsbStatus()
@@ -208,6 +191,12 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   public void onDestroyView() {
     super.onDestroyView();
 
+    // Clean up LiveKit video renderer
+    if (liveKitServer != null && videoRenderer != null) {
+      liveKitServer.cleanupVideoRenderer(this, videoRenderer);
+      videoRenderer = null;
+    }
+
     // Reset orientation when the view is destroyed
     if (getActivity() != null) {
       getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
@@ -220,37 +209,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
 
   @Override
   protected void processUSBData(String data) {
-    binding.voltageInfo.setText(
-        getString(
-            R.string.voltageInfo, String.format(Locale.US, "%2.1f", vehicle.getBatteryVoltage())));
-    binding.battery.setProgress(vehicle.getBatteryPercentage());
-    if (vehicle.getBatteryPercentage() < 15) {
-      binding.battery.setProgressTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.red)));
-      binding.battery.setProgressBackgroundTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.red)));
-    } else {
-      binding.battery.setProgressTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.green)));
-      binding.battery.setProgressBackgroundTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.green)));
-    }
-
-    binding.sonar.setProgress((int) (vehicle.getSonarReading() / 3));
-    if (vehicle.getSonarReading() / 3 < 15) {
-      binding.sonar.setProgressTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.red)));
-    } else if (vehicle.getSonarReading() / 3 < 45) {
-      binding.sonar.setProgressTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.yellow)));
-    } else {
-      binding.sonar.setProgressTintList(
-          ColorStateList.valueOf(getResources().getColor(R.color.green)));
-    }
-
-    binding.sonarInfo.setText(
-        getString(
-            R.string.distanceInfo, String.format(Locale.US, "%3.0f", vehicle.getSonarReading())));
+    // USB data processing for remote control
   }
 
   private void toggleIndicator(int value) {
@@ -269,38 +228,12 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   }
 
   protected void handleDriveCommand() {
-    // Get linear and angular velocity
-    float linear = vehicle.getLinearVelocity();
-    float angular = vehicle.getAngularVelocity();
-
-    // Also get left and right wheel speeds for backward compatibility
-    float left = vehicle.getLeftSpeed();
-    float right = vehicle.getRightSpeed();
-
-    // Display linear and angular velocity
-    binding.controllerContainer.controlInfo.setText(
-        String.format(Locale.US, "L:%.0f,A:%.0f", linear, angular));
-
-    binding.speed.speedPercentTo(vehicle.getSpeedPercent());
     binding.steering.setRotation(vehicle.getRotation());
     binding.driveGear.setText(vehicle.getDriveGear());
   }
 
   private void setSpeedMode(SpeedMode speedMode) {
     if (speedMode != null) {
-      switch (speedMode) {
-        case SLOW:
-          binding.controllerContainer.speedMode.setImageResource(R.drawable.ic_speed_low);
-          break;
-        case NORMAL:
-          binding.controllerContainer.speedMode.setImageResource(R.drawable.ic_speed_medium);
-          break;
-        case FAST:
-          binding.controllerContainer.speedMode.setImageResource(R.drawable.ic_speed_high);
-          break;
-      }
-
-      Timber.d("Updating  controlSpeed: %s", speedMode);
       preferencesManager.setSpeedMode(speedMode.getValue());
       vehicle.setSpeedMultiplier(speedMode.getValue());
     }
@@ -313,13 +246,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     switch (commandType) {
       case Constants.CMD_DRIVE:
         try {
-          // NOTE: added runOnUiThread, because if throws an exception, if controlled by web-server
-          requireActivity().runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-              handleDriveCommand();
-            }
-          });
+            requireActivity().runOnUiThread(() -> handleDriveCommand());
         } catch (IllegalStateException e) {
           e.printStackTrace();
         }
@@ -328,13 +255,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
 
       case Constants.CMD_LOGS:
         try {
-          // NOTE: added runOnUiThread, because if throws an exception, if controlled by web-server
-          requireActivity().runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-              toggleLogging();
-            }
-          });
+          requireActivity().runOnUiThread(() -> toggleLogging());
         } catch (IllegalStateException e) {
           e.printStackTrace();
         }
@@ -371,8 +292,8 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
         break;
 
       case Constants.CMD_WAYPOINTS:
-        // Waypoint handling removed as we're only visualizing anchors now
-        Timber.d("Waypoint command received but ignored - only visualizing anchors");
+        // Waypoint handling removed - only visualizing anchors
+        break;
 
 
     }
@@ -394,14 +315,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
           JSONObject localPoseJson = arCore.createLocalPoseJson(localPose);
 
           // Update status manager with local pose
-          if (statusManager != null) {
-            statusManager.updateARCorePose(localPoseJson);
-
-            // Log local pose data occasionally (every 30 frames)
-            if (frameNum % 30 == 0) {
-              Timber.d("Local pose: %s", localPoseJson.toString());
-            }
-          }
+          StatusManager.getInstance().updateARCorePose(localPoseJson);
         }
       }
     }
@@ -474,13 +388,11 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
    * @param totalCount Total number of anchors to resolve
    */
   private void updateResolvedCountText(int resolvedCount, int totalCount) {
-    if (binding != null && binding.anchorStatus != null) {
+    if (binding != null) {
       binding.anchorStatus.setText(String.format("Anchors: %d/%d", resolvedCount, totalCount));
 
       // Make sure the status is visible
       binding.anchorStatus.setVisibility(View.VISIBLE);
-    } else {
-      Timber.d("Cannot update anchor status text - view is null");
     }
   }
 
@@ -488,15 +400,13 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   // Local pose computation methods are now handled by ArCoreHandler
 
   private void resume() {
-    if (arCore == null)
-      return;
-    Timber.d("RESUME:  Checking for camera permissions...");
+    if (arCore == null) return;
+
     if (!PermissionUtils.hasCameraPermission(requireActivity())) {
       getCameraPermission();
     } else if (PermissionUtils.shouldShowRational(requireActivity(), Constants.PERMISSION_CAMERA)) {
       PermissionUtils.showCameraPermissionsPreviewToast(requireActivity());
     } else {
-      Timber.d("RESUME: START");
       setupArCore();
     }
   }
@@ -504,9 +414,17 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   @Override
   public void onStart() {
     super.onStart();
-    Timber.d("ON START");
-    if (arCore != null)
+    if (arCore != null) {
       arCore.setArCoreListener(this);
+    }
+
+    if (liveKitServer != null && PermissionUtils.hasControllerPermissions(requireActivity())) {
+      if (liveKitServer.isRoomConnected()) {
+        liveKitServer.startStreaming();
+      } else {
+        liveKitServer.connect();
+      }
+    }
   }
 
   @Override
@@ -519,7 +437,6 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     // Force landscape orientation
     requireActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
-    // Check if binding is not null before accessing its properties
     if (binding != null) {
       binding.bleToggle.setChecked(vehicle.bleConnected());
     }
@@ -531,47 +448,33 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
     super.onDestroy();
 
     if (arCore != null) {
-      try {
-        arCore.closeSession();
-      } catch (Exception e) {
-        Timber.e(e, "Error closing ARCore session in FreeRoamFragment");
-      } finally {
-        try {
-          CameraCapturerUtils.INSTANCE.unregisterCameraProvider(cameraProvider);
-        } catch (Exception e) {
-          Timber.e(e, "Error unregistering camera provider");
-        }
-        cameraProvider = null;
-        arCameraSession = null;
-        arCore = null;
+      arCore.closeSession();
+      if (cameraProvider != null) {
+        CameraCapturerUtils.INSTANCE.unregisterCameraProvider(cameraProvider);
       }
+      cameraProvider = null;
+      arCameraSession = null;
+      arCore = null;
     }
   }
 
   @Override
   public void onPause() {
-    // First handle the logging thread
     if (loggingHandlerThread != null) {
       loggingHandlerThread.quitSafely();
       try {
         loggingHandlerThread.join();
-        loggingHandlerThread = null;
-        loggingHandler = null;
       } catch (final InterruptedException e) {
-        Timber.e(e, "Error shutting down logging thread");
         Thread.currentThread().interrupt();
       }
+      loggingHandlerThread = null;
+      loggingHandler = null;
     }
 
     super.onPause();
 
-    // Then pause ARCore with error handling
     if (arCore != null) {
-      try {
-        arCore.pause();
-      } catch (Exception e) {
-        Timber.e(e, "Error pausing ARCore in FreeRoamFragment");
-      }
+      arCore.pause();
     }
   }
 
@@ -579,20 +482,12 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
   public void onStop() {
     super.onStop();
 
-    // Remove ARCore listener with error handling
     if (arCore != null) {
-      try {
-        arCore.removeArCoreListener();
-      } catch (Exception e) {
-        Timber.e(e, "Error removing ARCore listener in FreeRoamFragment");
-      }
+      arCore.removeArCoreListener();
     }
 
-    // Disconnect LiveKit server with error handling
-    try {
-      disConnectLiveKitServer();
-    } catch (Exception e) {
-      Timber.e(e, "Error disconnecting LiveKit server in FreeRoamFragment");
+    if (liveKitServer != null) {
+      liveKitServer.stopStreaming();
     }
   }
 
@@ -735,7 +630,7 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
       stopLogging(loggingCanceled);
       loggingEnabled = false;
     }
-    statusManager.updateStatus(ConnectionUtils.createStatus("LOGS", loggingEnabled));
+    getStatusManager().updateStatus(ConnectionUtils.createStatus("LOGS", loggingEnabled));
 
     // Check if binding is not null before accessing its properties
     if (binding != null) {
@@ -907,4 +802,5 @@ public class FreeRoamFragment extends LiveKitControlsFragment implements ArCoreL
       //}
     }
   }
+
 }

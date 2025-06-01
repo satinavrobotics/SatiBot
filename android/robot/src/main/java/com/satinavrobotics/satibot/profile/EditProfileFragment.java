@@ -44,8 +44,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.TimeZone;
 
-import org.openbot.R;
-import org.openbot.databinding.FragmentEditProfileBinding;
+import com.satinavrobotics.satibot.R;
+import com.satinavrobotics.satibot.databinding.FragmentEditProfileBinding;
 
 public class EditProfileFragment extends Fragment {
   private FragmentEditProfileBinding binding;

@@ -1,9 +1,9 @@
 package com.satinavrobotics.satibot.main;
 
-import static com.satibot.utils.Constants.PERMISSION_AUDIO;
-import static com.satibot.utils.Constants.PERMISSION_CAMERA;
-import static com.satibot.utils.Constants.PERMISSION_LOCATION;
-import static com.satibot.utils.Constants.PERMISSION_STORAGE;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_AUDIO;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_CAMERA;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_LOCATION;
+import static com.satinavrobotics.satibot.utils.Constants.PERMISSION_STORAGE;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -16,14 +16,13 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.preference.ListPreference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.SwitchPreferenceCompat;
-import org.openbot.R;
+import com.satinavrobotics.satibot.R;
 
 import com.satinavrobotics.satibot.utils.Constants;
 import com.satinavrobotics.satibot.utils.PermissionUtils;
 
 public class SettingsFragment extends PreferenceFragmentCompat {
-  private MainViewModel mViewModel;
-  private SwitchPreferenceCompat camera;
+    private SwitchPreferenceCompat camera;
   private SwitchPreferenceCompat storage;
   private SwitchPreferenceCompat location;
   private SwitchPreferenceCompat mic;
@@ -68,9 +67,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   @Override
   public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
     setPreferencesFromResource(R.xml.root_preferences, rootKey);
-
-    mViewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
-
     camera = findPreference("camera");
     if (camera != null) {
       camera.setChecked(PermissionUtils.hasCameraPermission(requireActivity()));
@@ -144,26 +140,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           });
     }
 
-    ListPreference streamMode = findPreference("video_server");
 
-    if (streamMode != null)
-      streamMode.setOnPreferenceChangeListener(
-          (preference, newValue) -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
-            builder.setTitle(R.string.confirm_title);
-            builder.setMessage(R.string.stream_change_body);
-            builder.setPositiveButton(
-                "Yes",
-                (dialog, id) -> {
-                  streamMode.setValue(newValue.toString());
-                  restartApp();
-                });
-            builder.setNegativeButton(
-                "Cancel", (dialog, id) -> streamMode.setValue(streamMode.getEntry().toString()));
-            AlertDialog dialog = builder.create();
-            dialog.show();
-            return false;
-          });
 
     ListPreference connectivityMode = findPreference("connection_type");
 
