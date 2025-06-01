@@ -11,6 +11,7 @@ import {Recorder} from './map/recording.js'
 const connection = new LiveKitClient();
 window.connection = connection
 const recorder = new Recorder();
+
 (async () => {
     const keyboard = new Keyboard()
     const gamepad = new Gamepad()

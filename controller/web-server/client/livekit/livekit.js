@@ -230,37 +230,92 @@ export function LiveKitClient() {
       return false;
   }
 
+  // Audio management
+  let audioContext = null;
+  let currentAudioTrack = null;
+  let isAudioMuted = true;
+
+  const initializeAudioContext = async () => {
+    if (!audioContext) {
+      try {
+        audioContext = new (window.AudioContext || window['webkitAudioContext'])();
+      } catch (error) {
+        console.error('AudioContext not supported:', error);
+        return;
+      }
+    }
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+  };
+
+  const handleAudioTrack = async (track) => {
+    currentAudioTrack = track;
+    const audioElement = document.getElementById('audio');
+
+    if (audioElement) {
+      // Clear existing track
+      if (audioElement.srcObject) {
+        audioElement.srcObject = null;
+      }
+
+      // Attach new track
+      track.attach(audioElement);
+      audioElement.muted = isAudioMuted;
+
+      // Update sound button icon
+      const soundButton = document.getElementById('sound_button');
+      if (soundButton) {
+        soundButton.src = isAudioMuted ? 'icons/volume_off_black_24dp.svg' : 'icons/volume_up_black_24dp.svg';
+      }
+    }
+  };
+
+  // Expose audio control methods
+  this.initializeAudioContext = initializeAudioContext;
+
+  this.toggleAudio = async () => {
+    await initializeAudioContext();
+
+    isAudioMuted = !isAudioMuted;
+
+    const audioElement = document.getElementById('audio');
+    const videoElement = document.getElementById('video');
+
+    if (audioElement) {
+      audioElement.muted = isAudioMuted;
+    }
+
+    if (videoElement) {
+      videoElement.muted = isAudioMuted;
+    }
+
+    return isAudioMuted;
+  };
+
   this.setupListeners = () => {
-    room.on(RoomEvent.TrackSubscribed, async (track, publication, participant) => {
+    room.on(RoomEvent.TrackSubscribed, async (track, _publication, participant) => {
       if (track.kind === Track.Kind.Video) {
         const videoElement = document.getElementById("video");
         track.attach(videoElement);
-        console.log("found video track");
+        videoElement.muted = isAudioMuted;
+        console.log("Video track attached");
       }
-      // Handle audio track for the first participant
-      if (track.kind === Track.Kind.Audio && participant === room.localParticipant) {
-        track.mute(); // Mute the audio track
-        console.log("Muted audio track for the first participant");
 
-        // Create a notification for the available audio track
-        const notification = document.createElement('div');
-        notification.innerText = "An audio track is available. Click to play.";
-        notification.style.position = 'fixed';
-        notification.style.bottom = '20px';
-        notification.style.left = '20px';
-        notification.style.backgroundColor = '#fff';
-        notification.style.padding = '10px';
-        notification.style.border = '1px solid #000';
-        notification.style.cursor = 'pointer';
-        document.body.appendChild(notification);
+      if (track.kind === Track.Kind.Audio) {
+        console.log(`Audio track from: ${participant.identity}`);
+        await handleAudioTrack(track);
+      }
+    });
 
-        // Add click event to play the audio track
-        notification.onclick = () => {
-          const audioElement = document.getElementById('audio'); // Create an audio element
-          track.attach(audioElement); // Attach the audio track to the audio element
-          audioElement.play(); // Start playing the audio
-          document.body.removeChild(notification); // Remove the notification after clicking
-        };
+    room.on(RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === Track.Kind.Audio && track === currentAudioTrack) {
+        currentAudioTrack = null;
+        const audioElement = document.getElementById('audio');
+        if (audioElement) {
+          audioElement.srcObject = null;
+        }
       }
     });
 

@@ -48,8 +48,8 @@
         <!-- "muted" attributed is needed, otherwise most browsers will not auto-stream the video. -->
         <div style="width: 100%; height: 100%; position: relative;">
             <video id='video' muted autoplay playsinline
-            "></video> 
-            <audio id='audio'></audio>
+            "></video>
+            <audio id='audio' preload="auto"></audio>
             <div id="buttons"
                  style="display:flex; flex-direction: row; justify-content: left; align-items: start; gap: 1em; margin: 1em 0; position: absolute; left: 50%; bottom: 5%; transform: translateX(-50%); background: white; border-radius: 4px; box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.15); padding: 5px;">
                 <img id="sound_button" class="button" src="icons/volume_off_black_24dp.svg" width="30"/>
@@ -195,7 +195,7 @@
                 <use href="#commute-edit-icon"/>
               </svg>
               <!-- End commutes SVGs -->
-          
+
               <main class="commutes">
                 <div class="commutes-map" aria-label="Map">
                   <div class="map-view"></div>
@@ -225,7 +225,7 @@
                     </div>
                   </div>
                 </div>
-          
+
                 <div class="commutes-info">
                   <div class="commutes-initial-state">
                     <svg aria-label="Directions Icon" width="53" height="53" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -241,7 +241,7 @@
                       <span class="label">Add mission</span>
                     </button>
                   </div>
-          
+
                   <div class="commutes-destinations">
                     <div class="destinations-container">
                       <div class="destination-list"></div>
@@ -265,7 +265,7 @@
                   </div>
                 </div>
               </main>
-          
+
               <script src="map/missions.js"></script>
               <script>
                 const CONFIGURATION = {
@@ -274,7 +274,7 @@
                   "mapOptions": {"center":{"lat":47.497912,"lng":19.040235},"fullscreenControl":true,"mapTypeControl":true,"streetViewControl":false,"zoom":14,"zoomControl":true,"maxZoom":20,"mapId":""},
                   "mapsApiKey": "AIzaSyC_HHDxrjYbysJLtwlYVaLFK8zBzw5kZAo"
                 };
-          
+
                function initMap() {
                   new Commutes(CONFIGURATION);
                 }

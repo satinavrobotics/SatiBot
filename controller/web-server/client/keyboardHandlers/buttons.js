@@ -23,12 +23,14 @@ export function Buttons (connection, available_cameras) {
   mirrorButton.onclick = toggleMirror
 
   // SOUND
-  // sound button. toggle 'muted' flag on the video control
-  const toggleSound = () => {
-    const video = document.getElementById('video')
-    video.muted = !video.muted
-    document.getElementById('sound_button').src = video.muted ? 'icons/volume_off_black_24dp.svg' : 'icons/volume_up_black_24dp.svg'
+  const toggleSound = async () => {
+    const isMuted = await connection.toggleAudio();
+    const soundButton = document.getElementById('sound_button');
+    if (soundButton) {
+      soundButton.src = isMuted ? 'icons/volume_off_black_24dp.svg' : 'icons/volume_up_black_24dp.svg';
+    }
   }
+
   const soundButton = document.getElementById('sound_button')
   soundButton.onclick = toggleSound
 
@@ -44,7 +46,7 @@ export function Buttons (connection, available_cameras) {
     connection.switchFlashlight()
       .then(response => {
         const result = JSON.parse(response)
-        console.log(result) 
+        console.log(result)
         // Handle the result from the switchFlashlight method
         if (result) {
           // Update button icon based on flashlight state
@@ -60,7 +62,7 @@ export function Buttons (connection, available_cameras) {
         flashlightButton.classList.remove('button-disabled')
       })
   }
-  
+
   const flashlightButton = document.getElementById('flashlight_button')
   if (flashlightButton) {
     flashlightButton.onclick = toggleFlashlight
