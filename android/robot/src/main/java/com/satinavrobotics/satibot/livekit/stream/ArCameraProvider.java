@@ -16,15 +16,35 @@ public class ArCameraProvider implements CameraCapturerUtils.CameraProvider {
     private ExternalCameraSession externalCameraSession;
 
     private static ArCameraProvider instance;
+    private static boolean isRegistered = false;
 
     public static ArCameraProvider getInstance() {
         if (instance == null) {
             instance = new ArCameraProvider();
-            CameraCapturerUtils.INSTANCE.registerCameraProvider(instance);
+            if (!isRegistered) {
+                CameraCapturerUtils.INSTANCE.registerCameraProvider(instance);
+                isRegistered = true;
+            }
         }
         instance.arCameraSession = ArCameraSession.getInstance();
         instance.externalCameraSession = ExternalCameraSession.getInstance();
         return instance;
+    }
+
+    /**
+     * Resets the singleton instance and unregisters from CameraCapturerUtils.
+     * This should be called during cleanup to prevent multiple camera sources.
+     */
+    public static synchronized void reset() {
+        if (instance != null) {
+            try {
+                CameraCapturerUtils.INSTANCE.unregisterCameraProvider(instance);
+            } catch (Exception e) {
+                android.util.Log.w("ArCameraProvider", "Error unregistering camera provider: " + e.getMessage());
+            }
+            instance = null;
+        }
+        isRegistered = false;
     }
 
     @Override

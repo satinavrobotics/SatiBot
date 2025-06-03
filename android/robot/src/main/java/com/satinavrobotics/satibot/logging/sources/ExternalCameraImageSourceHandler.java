@@ -13,21 +13,20 @@ import com.satinavrobotics.satibot.arcore.ArCoreHandler;
 import com.satinavrobotics.satibot.utils.ImageSource;
 
 import livekit.org.webrtc.VideoFrame;
+import timber.log.Timber;
 
 /**
  * Image source handler for External Camera
  * Provides: image, arcore pose, sync
  */
 public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
-    ExternalCameraConnector.BitmapCaptureListener, ArCoreListener {
+    ExternalCameraConnector.StreamListener, ArCoreListener {
 
     private ExternalCameraConnector externalCameraConnector;
     private ArCoreHandler arCoreHandler;
     private ImageSourceListener listener;
     private boolean isCapturing = false;
-    private String captureUrl = ""; // URL for capturing still images
-    private long captureIntervalMs = 100; // Capture interval in milliseconds
-    private Thread captureThread;
+    private String streamUrl = ""; // URL for streaming video
     private BitmapRenderer bitmapRenderer;
 
     // For synchronization
@@ -39,12 +38,8 @@ public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
         this.externalCameraConnector = new ExternalCameraConnector();
     }
 
-    public void setCaptureUrl(String captureUrl) {
-        this.captureUrl = captureUrl;
-    }
-
-    public void setCaptureInterval(long intervalMs) {
-        this.captureIntervalMs = intervalMs;
+    public void setStreamUrl(String streamUrl) {
+        this.streamUrl = streamUrl;
     }
 
     @Override
@@ -68,11 +63,11 @@ public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
             arCoreHandler.setArCoreListener(this);
         }
 
-        // Start external camera capture thread
-        if (externalCameraConnector != null && !captureUrl.isEmpty()) {
-            startCaptureThread();
+        // Start external camera stream
+        if (externalCameraConnector != null && !streamUrl.isEmpty()) {
+            externalCameraConnector.connectStream(streamUrl, this);
         } else if (listener != null) {
-            listener.onError("External camera capture URL not configured");
+            listener.onError("External camera stream URL not configured");
         }
     }
 
@@ -86,15 +81,9 @@ public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
             bitmapRenderer.clearSurface();
         }
 
-        // Stop the capture thread
-        if (captureThread != null && captureThread.isAlive()) {
-            captureThread.interrupt();
-            try {
-                captureThread.join(1000); // Wait up to 1 second for thread to finish
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            captureThread = null;
+        // Disconnect from external camera stream
+        if (externalCameraConnector != null) {
+            externalCameraConnector.disconnect();
         }
 
         if (arCoreHandler != null) {
@@ -130,56 +119,34 @@ public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
         this.bitmapRenderer = renderer;
     }
 
-    /**
-     * Start the capture thread that periodically captures images from the external camera
-     */
-    private void startCaptureThread() {
-        captureThread = new Thread(() -> {
-            while (isCapturing && !Thread.currentThread().isInterrupted()) {
-                try {
-                    // Capture an image from the external camera
-                    if (externalCameraConnector != null) {
-                        externalCameraConnector.captureBitmap(captureUrl, this);
-                    }
-
-                    // Wait for the specified interval before next capture
-                    Thread.sleep(captureIntervalMs);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                } catch (Exception e) {
-                    if (listener != null) {
-                        listener.onError("External camera capture error: " + e.getMessage());
-                    }
-                }
-            }
-        });
-        captureThread.start();
-    }
-
-    // ExternalCameraConnector.BitmapCaptureListener implementation
+    // ExternalCameraConnector.StreamListener implementation
     @Override
-    public void onImageCaptured(Bitmap bitmap) {
+    public void onFrame(VideoFrame frame) {
         if (!isCapturing) {
             return;
         }
 
         try {
-            if (bitmap != null) {
-                // Render bitmap to screen
-                if (bitmapRenderer != null) {
-                    bitmapRenderer.renderBitmap(bitmap);
-                }
+            if (frame != null && frame.getBuffer() instanceof ExternalCameraConnector.BitmapBuffer) {
+                ExternalCameraConnector.BitmapBuffer bitmapBuffer = (ExternalCameraConnector.BitmapBuffer) frame.getBuffer();
+                Bitmap bitmap = bitmapBuffer.getBitmap();
 
-                // Send to listener for logging
-                if (listener != null) {
-                    // Use the latest pose data from ARCore for synchronization
-                    listener.onFrameAvailable(bitmap, latestPose, latestCameraIntrinsics, System.currentTimeMillis());
+                if (bitmap != null) {
+                    // Render bitmap to screen
+                    if (bitmapRenderer != null) {
+                        bitmapRenderer.renderBitmap(bitmap);
+                    }
+
+                    // Send to listener for logging
+                    if (listener != null) {
+                        // Use the latest pose data from ARCore for synchronization
+                        listener.onFrameAvailable(bitmap, latestPose, latestCameraIntrinsics, System.currentTimeMillis());
+                    }
                 }
             }
         } catch (Exception e) {
             if (listener != null) {
-                listener.onError("External camera image processing error: " + e.getMessage());
+                listener.onError("External camera frame processing error: " + e.getMessage());
             }
         }
     }
@@ -188,6 +155,13 @@ public class ExternalCameraImageSourceHandler implements ImageSourceHandler,
     public void onError(Exception e) {
         if (listener != null) {
             listener.onError("External camera error: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void onDisconnected() {
+        if (listener != null) {
+            listener.onError("External camera disconnected");
         }
     }
 

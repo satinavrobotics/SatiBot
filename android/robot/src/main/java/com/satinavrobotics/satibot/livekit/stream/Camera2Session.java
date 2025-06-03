@@ -51,6 +51,7 @@ class Camera2Session implements CameraSession {
     private SessionState state;
     private boolean firstFrameReported;
     private final long constructionTimeNs;
+    private volatile boolean isIntentionallyStopping = false;
 
     public static void create(CreateSessionCallback callback, Events events, Context applicationContext, CameraManager cameraManager, SurfaceTextureHelper surfaceTextureHelper, String cameraId, int width, int height, int framerate) {
         new Camera2Session(callback, events, applicationContext, cameraManager, surfaceTextureHelper, cameraId, width, height, framerate);
@@ -117,6 +118,21 @@ class Camera2Session implements CameraSession {
         this.events.onCameraOpening();
 
         try {
+            // Check if camera is available before opening
+            String[] cameraIds = this.cameraManager.getCameraIdList();
+            boolean cameraExists = false;
+            for (String id : cameraIds) {
+                if (id.equals(this.cameraId)) {
+                    cameraExists = true;
+                    break;
+                }
+            }
+
+            if (!cameraExists) {
+                this.reportError("Camera " + this.cameraId + " is not available");
+                return;
+            }
+
             this.cameraManager.openCamera(this.cameraId, new CameraStateCallback(), this.cameraThreadHandler);
         } catch (IllegalArgumentException | SecurityException | CameraAccessException var2) {
             Exception e = var2;
@@ -129,6 +145,7 @@ class Camera2Session implements CameraSession {
         this.checkIsOnCameraThread();
         if (this.state != SessionState.STOPPED) {
             long stopStartTime = System.nanoTime();
+            this.isIntentionallyStopping = true;
             this.state = SessionState.STOPPED;
             this.stopInternal();
         }
@@ -136,25 +153,69 @@ class Camera2Session implements CameraSession {
     }
 
     private void stopInternal() {
-        Logging.d("Camera2Session", "Stop internal");
         this.checkIsOnCameraThread();
-        this.surfaceTextureHelper.stopListening();
+
+        // Stop surface texture helper first
+        try {
+            this.surfaceTextureHelper.stopListening();
+        } catch (Exception e) {
+            Logging.w("Camera2Session", "Error stopping surface texture helper: " + e.getMessage());
+        }
+
+        // Close capture session with enhanced error handling
         if (this.captureSession != null) {
-            this.captureSession.close();
+            try {
+                // Try to stop repeating requests first, but handle camera hardware errors gracefully
+                try {
+                    this.captureSession.stopRepeating();
+                } catch (Exception e) {
+                    // Handle specific camera hardware errors that may occur during stopRepeating
+                    String errorMsg = e.getMessage();
+                    if (errorMsg != null &&
+                        (errorMsg.contains("Function not implemented") ||
+                         errorMsg.contains("cancelRequest") ||
+                         errorMsg.contains("CAMERA_ERROR"))) {
+                        Logging.w("Camera2Session", "Camera hardware error during stopRepeating - continuing: " + errorMsg);
+                    } else {
+                        Logging.w("Camera2Session", "Error stopping repeating requests: " + errorMsg);
+                    }
+                }
+
+                // Add a small delay to let the camera hardware settle
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {}
+
+                // Now close the session
+                this.captureSession.close();
+            } catch (Exception e) {
+                Logging.w("Camera2Session", "Error closing capture session: " + e.getMessage());
+            }
             this.captureSession = null;
         }
 
+        // Release surface
         if (this.surface != null) {
-            this.surface.release();
+            try {
+                this.surface.release();
+            } catch (Exception e) {
+                Logging.w("Camera2Session", "Error releasing surface: " + e.getMessage());
+            }
             this.surface = null;
         }
 
+        // Close camera device
         if (this.cameraDevice != null) {
-            this.cameraDevice.close();
+            try {
+                this.cameraDevice.close();
+            } catch (Exception e) {
+                Logging.w("Camera2Session", "Error closing camera device: " + e.getMessage());
+            }
             this.cameraDevice = null;
         }
 
-        Logging.d("Camera2Session", "Stop done");
+        // Reset the stopping flag after cleanup is complete
+        this.isIntentionallyStopping = false;
     }
 
     private void reportError(String error) {
@@ -225,19 +286,64 @@ class Camera2Session implements CameraSession {
         public void onDisconnected(CameraDevice camera) {
             checkIsOnCameraThread();
             boolean startFailure = captureSession == null && state != SessionState.STOPPED;
-            state = SessionState.STOPPED;
-            stopInternal();
-            if (startFailure) {
-                callback.onFailure(FailureType.DISCONNECTED, "Camera disconnected / evicted.");
-            } else {
-                events.onCameraDisconnected(Camera2Session.this);
+
+            // If we're intentionally stopping, don't process this callback to avoid hardware errors
+            if (isIntentionallyStopping || cameraDevice == null) {
+                cameraDevice = null;
+                return;
             }
 
+            // Only handle disconnection if we're not already stopping
+            if (state != SessionState.STOPPED) {
+                state = SessionState.STOPPED;
+                cameraDevice = null;
+
+                // Clean up capture session without calling stopRepeating
+                if (captureSession != null) {
+                    try {
+                        // Don't call stopRepeating here as it may cause the hardware error
+                        // Just close the session directly
+                        captureSession.close();
+                    } catch (Exception e) {
+                        Logging.w("Camera2Session", "Error closing capture session in onDisconnected: " + e.getMessage());
+                    }
+                    captureSession = null;
+                }
+
+                if (surface != null) {
+                    try {
+                        surface.release();
+                    } catch (Exception e) {
+                        Logging.w("Camera2Session", "Error releasing surface in onDisconnected: " + e.getMessage());
+                    }
+                    surface = null;
+                }
+
+                if (startFailure) {
+                    callback.onFailure(FailureType.DISCONNECTED, "Camera disconnected / evicted.");
+                } else {
+                    events.onCameraDisconnected(Camera2Session.this);
+                }
+            } else {
+                // Already stopped, just clean up references
+                cameraDevice = null;
+                if (captureSession != null) {
+                    captureSession = null;
+                }
+                if (surface != null) {
+                    try {
+                        surface.release();
+                    } catch (Exception ignored) {}
+                    surface = null;
+                }
+            }
         }
 
         public void onError(CameraDevice camera, int errorCode) {
             checkIsOnCameraThread();
-            reportError(this.getErrorDescription(errorCode));
+            String errorDescription = this.getErrorDescription(errorCode);
+            Logging.e("Camera2Session", "Camera error " + errorCode + ": " + errorDescription);
+            reportError(errorDescription);
         }
 
         public void onOpened(CameraDevice camera) {

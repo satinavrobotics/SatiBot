@@ -234,6 +234,15 @@ export function LiveKitClient() {
   let audioContext = null;
   let currentAudioTrack = null;
   let isAudioMuted = true;
+  let hasUserInteracted = false;
+
+  // Add global click listener to detect user interaction
+  const detectUserInteraction = () => {
+    hasUserInteracted = true;
+    // Remove the listener after first interaction
+    document.removeEventListener('click', detectUserInteraction);
+  };
+  document.addEventListener('click', detectUserInteraction);
 
   const initializeAudioContext = async () => {
     if (!audioContext) {
@@ -264,6 +273,22 @@ export function LiveKitClient() {
       track.attach(audioElement);
       audioElement.muted = isAudioMuted;
 
+      // Try to play audio only if user has interacted and audio is not muted
+      if (!isAudioMuted && hasUserInteracted) {
+        try {
+          await audioElement.play();
+        } catch (error) {
+          if (error.name === 'NotAllowedError') {
+            console.log('Audio autoplay blocked by browser policy. User interaction required.');
+            // Keep audio muted until user explicitly enables it
+            audioElement.muted = true;
+            isAudioMuted = true;
+          } else {
+            console.error('Error playing audio:', error);
+          }
+        }
+      }
+
       // Update sound button icon
       const soundButton = document.getElementById('sound_button');
       if (soundButton) {
@@ -276,6 +301,9 @@ export function LiveKitClient() {
   this.initializeAudioContext = initializeAudioContext;
 
   this.toggleAudio = async () => {
+    // Mark that user has interacted with the page
+    hasUserInteracted = true;
+
     await initializeAudioContext();
 
     isAudioMuted = !isAudioMuted;
@@ -285,6 +313,22 @@ export function LiveKitClient() {
 
     if (audioElement) {
       audioElement.muted = isAudioMuted;
+
+      // If unmuting and there's an audio track, try to play it
+      if (!isAudioMuted && currentAudioTrack) {
+        try {
+          await audioElement.play();
+        } catch (error) {
+          if (error.name === 'NotAllowedError') {
+            console.log('Audio playback blocked by browser policy.');
+            // Revert to muted state
+            audioElement.muted = true;
+            isAudioMuted = true;
+          } else {
+            console.error('Error playing audio:', error);
+          }
+        }
+      }
     }
 
     if (videoElement) {

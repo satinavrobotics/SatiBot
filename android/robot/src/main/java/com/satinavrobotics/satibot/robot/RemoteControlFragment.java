@@ -60,6 +60,7 @@ import com.satinavrobotics.satibot.utils.Constants;
 import com.satinavrobotics.satibot.utils.PermissionUtils;
 
 import io.livekit.android.renderer.SurfaceViewRenderer;
+import io.livekit.android.room.Room;
 import com.satinavrobotics.satibot.googleServices.GoogleSignInCallback;
 import com.satinavrobotics.satibot.utils.ConnectionUtils;
 import com.satinavrobotics.satibot.utils.Enums;
@@ -118,18 +119,21 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     // Force landscape orientation
     requireActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
+    // Initialize ARCore first
+    Handler handlerMain = new Handler(Looper.getMainLooper());
+    arCore = new ArCoreHandler(requireContext(), binding.surfaceView, handlerMain);
+
+    // Then initialize camera sessions and set the ARCore handler
     arCameraSession = ArCameraSession.getInstance();
-    //externalCameraSession = ExternalCameraSession.getInstance();
+    arCameraSession.setArCoreHandler(arCore);
+
+    externalCameraSession = ExternalCameraSession.getInstance();
+
+    // Finally initialize camera provider (this should be last as it may trigger camera creation)
     cameraProvider = ArCameraProvider.getInstance();
 
     Intent serviceIntent = new Intent(requireActivity(), LocationService.class);
       requireContext().startService(serviceIntent);
-
-    Handler handlerMain = new Handler(Looper.getMainLooper());
-    arCore = new ArCoreHandler(requireContext(), binding.surfaceView, handlerMain);
-    arCameraSession.setArCoreHandler(arCore);
-
-    //externalCameraSession.startSession();
 
     // Set up anchor resolution listener
     arCore.setAnchorResolutionListener(this::updateResolvedCountText);
@@ -138,12 +142,9 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     liveKitServer = LiveKitServer.getInstance(requireContext());
     requestPermissionLauncher = liveKitServer.createPermissionLauncher(this);
 
-    // Setup video renderer after view is ready (only if not already set up)
-    binding.getRoot().post(() -> {
-      if (videoRenderer == null) {
-        videoRenderer = liveKitServer.setupVideoRenderer(this);
-      }
-    });
+    // Setup video renderer immediately - don't wait for post
+    videoRenderer = liveKitServer.setupVideoRenderer(this);
+    Timber.d("Video renderer set up: %s", videoRenderer != null ? "success" : "failed");
 
     googleServices = new GoogleServices(requireActivity(), requireContext(), new GoogleSignInCallback() {
       @Override
@@ -419,9 +420,16 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     }
 
     if (liveKitServer != null && PermissionUtils.hasControllerPermissions(requireActivity())) {
-      if (liveKitServer.isRoomConnected()) {
-        liveKitServer.startStreaming();
+      if (liveKitServer.canStartStreaming()) {
+        Timber.d("Room is connected, starting streaming...");
+        // Simple approach: always start streaming when we return to the fragment
+        binding.getRoot().postDelayed(() -> {
+          liveKitServer.startStreaming();
+        }, 200);
       } else {
+        // Log current state for debugging
+        Room.State currentState = liveKitServer.getCurrentRoomState();
+        Timber.d("Room not ready for streaming, current state: %s", currentState);
         liveKitServer.connect();
       }
     }
@@ -437,6 +445,8 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     // Force landscape orientation
     requireActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
 
+    // External camera session will be started when user switches to external camera via LiveKit
+
     if (binding != null) {
       binding.bleToggle.setChecked(vehicle.bleConnected());
     }
@@ -447,19 +457,40 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
   public void onDestroy() {
     super.onDestroy();
 
+    // Close ARCore session first
     if (arCore != null) {
-      arCore.closeSession();
-      if (cameraProvider != null) {
-        CameraCapturerUtils.INSTANCE.unregisterCameraProvider(cameraProvider);
+      try {
+        arCore.closeSession(() -> {
+          // After ARCore is closed, clean up local references but don't reset singletons
+          // unless this is a final cleanup (activity being destroyed)
+          cleanupLocalReferences();
+        });
+      } catch (Exception e) {
+        Timber.w(e, "Error closing ARCore session during destroy");
+        // Force cleanup even if closeSession fails
+        cleanupLocalReferences();
       }
-      cameraProvider = null;
-      arCameraSession = null;
-      arCore = null;
+    } else {
+      // No ARCore session, just clean up local references
+      cleanupLocalReferences();
     }
+  }
+
+  /**
+   * Cleans up local references without resetting singletons.
+   * Singletons are only reset during LiveKit disconnect or app termination.
+   */
+  private void cleanupLocalReferences() {
+    cameraProvider = null;
+    arCameraSession = null;
+    externalCameraSession = null;
+    arCore = null;
   }
 
   @Override
   public void onPause() {
+    stopCameraSessions();
+
     if (loggingHandlerThread != null) {
       loggingHandlerThread.quitSafely();
       try {
@@ -474,7 +505,11 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     super.onPause();
 
     if (arCore != null) {
-      arCore.pause();
+      try {
+        arCore.pause();
+      } catch (Exception e) {
+        Timber.w(e, "Error pausing ARCore");
+      }
     }
   }
 
@@ -483,11 +518,42 @@ public class RemoteControlFragment extends ControlsFragment implements ArCoreLis
     super.onStop();
 
     if (arCore != null) {
-      arCore.removeArCoreListener();
+      try {
+        arCore.removeArCoreListener();
+      } catch (Exception e) {
+        Timber.w(e, "Error removing ARCore listener");
+      }
     }
 
     if (liveKitServer != null) {
-      liveKitServer.stopStreaming();
+      new Thread(() -> {
+        try {
+          liveKitServer.stopStreaming();
+        } catch (Exception e) {
+          Timber.w(e, "Error stopping LiveKit streaming");
+        }
+      }).start();
+    }
+  }
+
+  /**
+   * Stops camera sessions without resetting singletons
+   */
+  private void stopCameraSessions() {
+    if (externalCameraSession != null) {
+      try {
+        externalCameraSession.stop();
+      } catch (Exception e) {
+        Timber.w(e, "Error stopping external camera session");
+      }
+    }
+
+    if (arCameraSession != null && arCameraSession.isRunning()) {
+      try {
+        arCameraSession.stop();
+      } catch (Exception e) {
+        Timber.w(e, "Error stopping ARCore camera session");
+      }
     }
   }
 

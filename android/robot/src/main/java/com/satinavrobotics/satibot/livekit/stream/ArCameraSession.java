@@ -139,8 +139,6 @@ public class ArCameraSession implements CameraSession, CameraSession.CreateSessi
                 isRunning = true;
                 createSessionCallback.onDone(this);
             } catch (Exception e) {
-                // If ARCore fails to start, notify failure
-                android.util.Log.e("ArCameraSession", "Failed to start ARCore session: " + e.getMessage(), e);
                 createSessionCallback.onFailure(FailureType.ERROR, "Failed to start ARCore session: " + e.getMessage());
             }
         }
@@ -148,16 +146,79 @@ public class ArCameraSession implements CameraSession, CameraSession.CreateSessi
 
     @Override
     public void stop() {
-        if (arCoreHandler != null) {
-            arCoreHandler.closeSession();
+        try {
+            if (arCoreHandler != null) {
+                arCoreHandler.closeSession(() -> {
+                    // Just mark as not running, keep callbacks for reuse
+                    isRunning = false;
+                });
+            } else {
+                // No ARCore handler, just mark as not running
+                isRunning = false;
+            }
+        } catch (Exception e) {
+            // Log error but ensure cleanup happens
+            if (arCoreHandler != null) {
+                try {
+                    // Try to get session info for logging
+                    String sessionInfo = arCoreHandler.getSession() != null ? "active" : "null";
+                    android.util.Log.w("ArCameraSession", "Error stopping ARCore session (session: " + sessionInfo + "): " + e.getMessage());
+                } catch (Exception logError) {
+                    android.util.Log.w("ArCameraSession", "Error stopping ARCore session: " + e.getMessage());
+                }
+            }
+            // Force cleanup even if closeSession fails
+            isRunning = false;
         }
-        eventsCallback = null;
-        createSessionCallback = null;
-        cameraThreadHandler = null;
-        isRunning = false;
+    }
+
+    /**
+     * Completely stops and clears all callbacks. Used during reset.
+     */
+    private void stopAndClearCallbacks() {
+        try {
+            if (arCoreHandler != null) {
+                arCoreHandler.closeSession(() -> {
+                    // Cleanup completed successfully
+                    eventsCallback = null;
+                    createSessionCallback = null;
+                    cameraThreadHandler = null;
+                    isRunning = false;
+                });
+            } else {
+                // No ARCore handler, just clean up state
+                eventsCallback = null;
+                createSessionCallback = null;
+                cameraThreadHandler = null;
+                isRunning = false;
+            }
+        } catch (Exception e) {
+            // Log error but ensure cleanup happens
+            android.util.Log.w("ArCameraSession", "Error in stopAndClearCallbacks: " + e.getMessage());
+            // Force cleanup even if closeSession fails
+            eventsCallback = null;
+            createSessionCallback = null;
+            cameraThreadHandler = null;
+            isRunning = false;
+        }
     }
 
     public boolean isRunning() {
         return isRunning;
+    }
+
+    /**
+     * Resets the singleton instance. This should be called during cleanup
+     * to prevent stale references and multiple camera sources.
+     */
+    public static synchronized void reset() {
+        if (instance != null) {
+            try {
+                instance.stopAndClearCallbacks();
+            } catch (Exception e) {
+                android.util.Log.w("ArCameraSession", "Error stopping session during reset: " + e.getMessage());
+            }
+            instance = null;
+        }
     }
 }

@@ -184,7 +184,9 @@ public class LiveKitServer  {
 
     public void setView(SurfaceViewRenderer view) {
         this.videoRenderer = view;
-        room.initVideoRenderer(view);
+        if (room != null) {
+            room.initVideoRenderer(view);
+        }
     }
 
     public void clearView() {
@@ -214,16 +216,34 @@ public class LiveKitServer  {
             rootView.addView(renderer, 0);
         }
 
-        // Let LiveKit handle the initialization through setView
-        setView(renderer);
+        // Initialize the renderer with the room first, then set as current renderer
+        if (room != null) {
+            room.initVideoRenderer(renderer);
+        }
+        this.videoRenderer = renderer;
+
         return renderer;
     }
 
     public void cleanupVideoRenderer(Fragment fragment, SurfaceViewRenderer videoRenderer) {
         if (videoRenderer != null) {
-            // Clear the view reference first to prevent LiveKit from using it
+            // Remove video track from renderer first
+            if (room != null && room.getState() == Room.State.CONNECTED) {
+                try {
+                    LocalParticipant localParticipant = room.getLocalParticipant();
+                    TrackPublication publication = localParticipant.getTrackPublication(Track.Source.CAMERA);
+                    if (publication != null) {
+                        LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
+                        if (localTrack != null) {
+                            localTrack.removeRenderer(videoRenderer);
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            // Clear the view reference to prevent LiveKit from using it
             if (this.videoRenderer == videoRenderer) {
-                clearView();
+                this.videoRenderer = null;
             }
 
             ViewGroup parent = (ViewGroup) videoRenderer.getParent();
@@ -288,6 +308,7 @@ public class LiveKitServer  {
 
     /**
      * Connects to the LiveKit room using hardcoded parameters.
+     * Handles reconnection scenarios and validates tokens.
      */
     public void connect() {
         // Check internet connectivity before attempting to connect
@@ -301,21 +322,47 @@ public class LiveKitServer  {
             @Override
             public void run() {
                 try {
-                    Timber.d("ROOM CONNECTION INITIALIZED");
+                    Timber.d("Starting connection process...");
                     if (!hasRequiredPermissions()) {
                         Timber.e("Missing required permissions for camera and/or microphone");
                         return;
                     }
 
-                    if (room.getState() == Room.State.DISCONNECTED) {
-                        String ROOM_URL = tokenManager.getServerAddress();
-                        String ROOM_TOKEN = tokenManager.getToken();
-                        Timber.d(room.getState().toString());
-                        room.connect(ROOM_URL, ROOM_TOKEN, connectOptions, new OnRoomConnected());
+                    // Validate token before attempting connection
+                    String ROOM_URL = tokenManager.getServerAddress();
+                    String ROOM_TOKEN = tokenManager.getToken();
+
+                    if (ROOM_URL == null || ROOM_TOKEN == null) {
+                        Timber.e("Cannot connect: missing server URL or token");
+                        return;
                     }
-                    // Note: setConnected(true) is now called in OnRoomConnected callback
+
+                    Room.State currentState = room.getState();
+                    Timber.d("Current room state: %s", currentState);
+
+                    if (currentState == Room.State.DISCONNECTED) {
+                        Timber.d("Connecting to room...");
+                        room.connect(ROOM_URL, ROOM_TOKEN, connectOptions, new OnRoomConnected());
+                    } else if (currentState == Room.State.CONNECTED) {
+                        Timber.d("Room is already connected, updating connection state");
+                        setConnected(true);
+                    } else if (currentState == Room.State.CONNECTING || currentState == Room.State.RECONNECTING) {
+                        Timber.d("Room is already connecting/reconnecting, current state: %s", currentState);
+                        // Don't start another connection attempt, just wait for current one to complete
+                    } else {
+                        Timber.w("Room is in unexpected state: %s, attempting to reconnect", currentState);
+                        // For unexpected states, try to disconnect first then reconnect
+                        try {
+                            room.disconnect();
+                            Thread.sleep(1000); // Brief wait for disconnect
+                            room.connect(ROOM_URL, ROOM_TOKEN, connectOptions, new OnRoomConnected());
+                        } catch (Exception e) {
+                            Timber.e(e, "Error during forced reconnection");
+                        }
+                    }
+                    // Note: setConnected(true) is called in OnRoomConnected callback
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    Timber.e(e, "Error during connection process");
                 }
             }
         }).start();
@@ -324,6 +371,7 @@ public class LiveKitServer  {
     /**
      * Starts streaming video and microphone if the room is connected.
      * Also registers all RPC methods for command handling and initializes manual controls.
+     * Includes state validation to prevent duplicate registrations during reconnection.
      */
     public void startStreaming() {
         new Thread(new Runnable() {
@@ -331,7 +379,8 @@ public class LiveKitServer  {
             public void run() {
                 try {
                     if (room.getState() != Room.State.CONNECTED) {
-                        Timber.e("Cannot start streaming: room is not connected");
+                        Timber.e("Cannot start streaming: room is not connected (state: %s)",
+                                room.getState());
                         return;
                     }
 
@@ -340,20 +389,46 @@ public class LiveKitServer  {
                         return;
                     }
 
-                    Timber.d("Starting streaming...");
                     LocalParticipant localParticipant = room.getLocalParticipant();
+                    if (localParticipant == null) {
+                        Timber.e("Cannot start streaming: local participant is null");
+                        return;
+                    }
 
-                    // Enable camera and microphone
-                    localParticipant.setCameraEnabled(true, new OnCameraConnected());
-                    localParticipant.setMicrophoneEnabled(true, new OnMicConnected());
+                    Timber.d("Starting streaming process...");
 
-                    // Register all RPC methods
+                    // Check if camera is already enabled to avoid duplicate operations
+                    TrackPublication cameraPublication = localParticipant.getTrackPublication(Track.Source.CAMERA);
+                    if (cameraPublication == null || !cameraPublication.getTrack().getEnabled()) {
+                        Timber.d("Enabling camera...");
+                        localParticipant.setCameraEnabled(true, new OnCameraConnected());
+                    } else {
+                        Timber.d("Camera already enabled, reattaching video track...");
+                        // Camera is already enabled, just reattach the video track
+                        LocalVideoTrack localTrack = (LocalVideoTrack) cameraPublication.getTrack();
+                        if (localTrack != null) {
+                            attachLocalVideo(localTrack);
+                        }
+                    }
+
+                    // Check if microphone is already enabled
+                    TrackPublication micPublication = localParticipant.getTrackPublication(Track.Source.MICROPHONE);
+                    if (micPublication == null || !micPublication.getTrack().getEnabled()) {
+                        Timber.d("Enabling microphone...");
+                        localParticipant.setMicrophoneEnabled(true, new OnMicConnected());
+                    } else {
+                        Timber.d("Microphone already enabled");
+                    }
+
+                    // Register all RPC methods (this handles duplicate registrations gracefully)
+                    Timber.d("Registering RPC methods...");
                     registerRpcMethods(localParticipant);
 
                     // Initialize manual controls when streaming starts
+                    Timber.d("Initializing manual controls...");
                     initializeManualControls();
 
-                    // Ensure video track is attached to renderer after camera is enabled
+                    // Ensure video track is attached to renderer after camera is enabled (fallback)
                     new Handler(Looper.getMainLooper()).postDelayed(() -> {
                         try {
                             TrackPublication publication = localParticipant.getTrackPublication(Track.Source.CAMERA);
@@ -361,13 +436,18 @@ public class LiveKitServer  {
                                 LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
                                 if (localTrack != null && videoRenderer != null) {
                                     localTrack.addRenderer(videoRenderer);
+                                    Timber.d("Video track attached to renderer (fallback)");
                                 }
                             }
-                        } catch (Exception ignored) {}
+                        } catch (Exception e) {
+                            Timber.w(e, "Failed to attach video track in fallback");
+                        }
                     }, 500);
 
+                    Timber.d("Streaming started successfully");
+
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    Timber.e(e, "Error starting streaming");
                 }
             }
         }).start();
@@ -431,86 +511,106 @@ public class LiveKitServer  {
         }
     }
 
+    public void switchCamera(String cameraName) {
+        LocalParticipant localParticipant = room.getLocalParticipant();
+        switchCamera(localParticipant, cameraName);
+    }
+    public void switchCamera(LocalParticipant localParticipant, String cameraName) {
+        LocalVideoTrack localTrack = (LocalVideoTrack) localParticipant.getTrackPublication(Track.Source.CAMERA).getTrack();
+        Timber.d("Switching camera to: %s", cameraName);
+        localTrack.switchCamera(cameraName, null);
+        Timber.d("Switched camera successfully to: %s", cameraName);
+    }
+
     /**
      * Registers RPC methods for manual control operations.
      * Manual control methods: switch-camera, client-connected, drive-cmd, cmd, status
+     * Handles duplicate registrations gracefully.
      *
      * @param localParticipant the local participant to register methods on.
      */
     private void registerManualControlRpcMethods(LocalParticipant localParticipant) {
-        localParticipant.registerRpcMethod(
-                "switch-camera",  (data, error) -> {
-                    // Process the received data
-                    Timber.d("Camera switch request received: %s", data.getPayload());
-                    try {
-                        LocalVideoTrack localTrack = (LocalVideoTrack) localParticipant.getTrackPublication(Track.Source.CAMERA).getTrack();
-                        Timber.d("Switching camera2");
-                        localTrack.switchCamera(data.getPayload(), null);
-                        Timber.d("Switched camera successfully");
-                        return "{ 'status': 'success' }";
-                    } catch (Error e) {
-                        Timber.e(e, "Failed to switch camera");
-                        return "{ 'error': 'Failed to switch camera' }";
-                    }
-                },
-                new BaseContinuation()
-        );
+        try {
+            localParticipant.registerRpcMethod(
+                    "switch-camera",  (data, error) -> {
+                        // Process the received data
+                        Timber.d("Camera switch request received: %s", data.getPayload());
+                        try {
+                            switchCamera(localParticipant, data.getPayload());
+                            return "{ 'status': 'success' }";
+                        } catch (Error e) {
+                            Timber.e(e, "Failed to switch camera");
+                            return "{ 'error': 'Failed to switch camera' }";
+                        }
+                    },
+                    new BaseContinuation()
+            );
 
-        localParticipant.registerRpcMethod(
-                "client-connected",  (data, error) -> {
-                    ControllerToBotEventBus.emitEvent(data.getPayload());
-                    return getCameraIdsJson();
-                },
-                new BaseContinuation()
-        );
+            localParticipant.registerRpcMethod(
+                    "client-connected",  (data, error) -> {
+                        ControllerToBotEventBus.emitEvent(data.getPayload());
+                        return getCameraIdsJson();
+                    },
+                    new BaseContinuation()
+            );
 
-        localParticipant.registerRpcMethod(
-                "drive-cmd",  (data, error) -> {
-                    ControllerToBotEventBus.emitEvent(data.getPayload());
-                    return "0";
-                },
-                new BaseContinuation()
-        );
+            localParticipant.registerRpcMethod(
+                    "drive-cmd",  (data, error) -> {
+                        ControllerToBotEventBus.emitEvent(data.getPayload());
+                        return "0";
+                    },
+                    new BaseContinuation()
+            );
 
-        localParticipant.registerRpcMethod(
-                "cmd",  (data, error) -> {
-                    ControllerToBotEventBus.emitEvent(data.getPayload());
-                    return "0";
-                },
-                new BaseContinuation()
-        );
+            localParticipant.registerRpcMethod(
+                    "cmd",  (data, error) -> {
+                        ControllerToBotEventBus.emitEvent(data.getPayload());
+                        return "0";
+                    },
+                    new BaseContinuation()
+            );
 
-        localParticipant.registerRpcMethod(
-                "status", (data, error) -> statusManager.getStatus().toString(),
-                new BaseContinuation());
+            localParticipant.registerRpcMethod(
+                    "status", (data, error) -> statusManager.getStatus().toString(),
+                    new BaseContinuation());
+
+            Timber.d("Successfully registered manual control RPC methods");
+        } catch (Exception e) {
+            Timber.w(e, "Error registering manual control RPC methods (may already be registered)");
+        }
     }
 
     /**
      * Registers RPC methods for autonomous control operations.
-     * Autonomous control methods: waypoint-cmd, status
+     * Autonomous control methods: waypoint-cmd
+     * Note: status method is already registered by manual control methods
+     * Handles duplicate registrations gracefully.
      *
      * @param localParticipant the local participant to register methods on.
      */
     private void registerAutonomousControlRpcMethods(LocalParticipant localParticipant) {
-        localParticipant.registerRpcMethod(
-                "waypoint-cmd",  (data, error) -> {
-                    JSONObject event;
-                    try {
-                        event = new JSONObject(data.getPayload());
-                        event.put("command", "WAYPOINTS");
-                        ControllerToBotEventBus.emitEvent(event.toString());
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-                    return "0";
-                },
-                new BaseContinuation()
-        );
+        try {
+            localParticipant.registerRpcMethod(
+                    "waypoint-cmd",  (data, error) -> {
+                        JSONObject event;
+                        try {
+                            event = new JSONObject(data.getPayload());
+                            event.put("command", "WAYPOINTS");
+                            ControllerToBotEventBus.emitEvent(event.toString());
+                        } catch (JSONException e) {
+                            e.printStackTrace();
+                        }
+                        return "0";
+                    },
+                    new BaseContinuation()
+            );
 
-        // Note: status method is also available for autonomous control
-        localParticipant.registerRpcMethod(
-                "status", (data, error) -> statusManager.getStatus().toString(),
-                new BaseContinuation());
+            Timber.d("Successfully registered autonomous control RPC methods");
+        } catch (Exception e) {
+            Timber.w(e, "Error registering autonomous control RPC methods (may already be registered)");
+        }
+
+        // Note: status method is already registered by manual control methods to avoid conflicts
     }
 
     /**
@@ -526,22 +626,21 @@ public class LiveKitServer  {
             localParticipant.unregisterRpcMethod("drive-cmd");
             localParticipant.unregisterRpcMethod("cmd");
             localParticipant.unregisterRpcMethod("status");
-            Timber.d("Successfully unregistered manual control RPC methods");
         } catch (Exception e) {
-            Timber.e(e, "Failed to unregister manual control RPC methods: %s", e.getMessage());
+            Timber.e(e, "Failed to unregister manual control RPC methods");
         }
     }
 
     /**
      * Unregisters autonomous control RPC methods.
-     * Autonomous control methods: waypoint-cmd, status
+     * Autonomous control methods: waypoint-cmd
+     * Note: status method is managed by manual control methods
      *
      * @param localParticipant the local participant to unregister methods from.
      */
     private void unregisterAutonomousControlRpcMethods(LocalParticipant localParticipant) {
         try {
             localParticipant.unregisterRpcMethod("waypoint-cmd");
-            localParticipant.unregisterRpcMethod("status");
             Timber.d("Successfully unregistered autonomous control RPC methods");
         } catch (Exception e) {
             Timber.e(e, "Failed to unregister autonomous control RPC methods: %s", e.getMessage());
@@ -603,7 +702,64 @@ public class LiveKitServer  {
      */
     private void attachLocalVideo(LocalVideoTrack videoTrack) {
         if (videoRenderer != null) {
-            videoTrack.addRenderer(videoRenderer);
+            try {
+                videoTrack.addRenderer(videoRenderer);
+                Timber.d("Video track successfully added to renderer");
+            } catch (Exception e) {
+                Timber.e(e, "Failed to add video track to renderer");
+            }
+        } else {
+            Timber.w("Cannot attach video track: video renderer is null");
+        }
+    }
+
+    /**
+     * Reattaches the current video track to the renderer.
+     * Used when the renderer is recreated but the room is already connected.
+     */
+    public void reattachVideoTrack() {
+        if (room == null) {
+            Timber.w("Cannot reattach video track: room is null");
+            return;
+        }
+
+        if (room.getState() != Room.State.CONNECTED) {
+            Timber.w("Cannot reattach video track: room is not connected (state: %s)", room.getState());
+            return;
+        }
+
+        if (videoRenderer == null) {
+            Timber.w("Cannot reattach video track: video renderer is null");
+            return;
+        }
+
+        try {
+            LocalParticipant localParticipant = room.getLocalParticipant();
+            if (localParticipant == null) {
+                Timber.w("Cannot reattach video track: local participant is null");
+                return;
+            }
+
+            TrackPublication publication = localParticipant.getTrackPublication(Track.Source.CAMERA);
+            if (publication == null) {
+                Timber.w("Cannot reattach video track: camera track publication is null");
+                return;
+            }
+
+            LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
+            if (localTrack == null) {
+                Timber.w("Cannot reattach video track: camera track is null");
+                return;
+            }
+
+            // Remove from current renderer first (if any) and add to new renderer
+            try {
+                localTrack.removeRenderer(videoRenderer); // Remove first in case it was already added
+            } catch (Exception ignored) {}
+            localTrack.addRenderer(videoRenderer);
+            Timber.d("Video track successfully reattached to new renderer");
+        } catch (Exception e) {
+            Timber.e(e, "Error reattaching video track to renderer");
         }
     }
 
@@ -611,49 +767,104 @@ public class LiveKitServer  {
         if (room == null || room.getState() != Room.State.CONNECTED) {
             return;
         }
+
         try {
             LocalParticipant localParticipant = room.getLocalParticipant();
-            localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
-            localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
-            unregisterManualControlRpcMethods(localParticipant);
-        } catch (TrackException.PublishException e) {
-            e.printStackTrace();
+            if (localParticipant != null) {
+                // Simple disable - let LiveKit handle cleanup
+                localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
+                localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
+                unregisterManualControlRpcMethods(localParticipant);
+            }
+        } catch (Exception e) {
+            Timber.w(e, "Error stopping streaming");
         }
-
     }
 
     /**
      * Disconnects from the LiveKit room.
+     * Performs complete cleanup including stopping streaming, unregistering RPC methods,
+     * and cleaning up video tracks.
      */
     public void disconnect() {
-        // Run the disconnection on a separate thread to avoid blocking the main thread
         new Thread(() -> {
             try {
-                Timber.d("Disconnecting from LiveKit room...");
+                Timber.d("Starting disconnect process...");
 
-                // Disable camera and microphone first
-                LocalParticipant localParticipant = room.getLocalParticipant();
-                if (localParticipant != null) {
-                    try {
-                        localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
-                        localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
-                    } catch (Exception e) {
-                        Timber.e(e, "Error disabling camera/microphone during disconnect");
-                    }
-                }
-
-                // Actually disconnect from the room
+                // First stop streaming and clean up properly
                 if (room != null && room.getState() == Room.State.CONNECTED) {
+                    LocalParticipant localParticipant = room.getLocalParticipant();
+                    if (localParticipant != null) {
+                        Timber.d("Cleaning up streaming and RPC methods...");
+
+                        // Disable camera and microphone
+                        try {
+                            localParticipant.setCameraEnabled(false, new BaseBooleanContinuation());
+                            localParticipant.setMicrophoneEnabled(false, new BaseBooleanContinuation());
+                        } catch (Exception e) {
+                            Timber.w(e, "Error disabling camera/microphone during disconnect");
+                        }
+
+                        // Unregister all RPC methods to prevent conflicts on reconnect
+                        try {
+                            unregisterManualControlRpcMethods(localParticipant);
+                            unregisterAutonomousControlRpcMethods(localParticipant);
+                            Timber.d("Successfully unregistered all RPC methods");
+                        } catch (Exception e) {
+                            Timber.w(e, "Error unregistering RPC methods during disconnect");
+                        }
+
+                        // Clean up video track attachments
+                        try {
+                            if (videoRenderer != null) {
+                                TrackPublication publication = localParticipant.getTrackPublication(Track.Source.CAMERA);
+                                if (publication != null) {
+                                    LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
+                                    if (localTrack != null) {
+                                        localTrack.removeRenderer(videoRenderer);
+                                        Timber.d("Removed video renderer from track");
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            Timber.w(e, "Error cleaning up video track during disconnect");
+                        }
+                    }
+
+                    // Now disconnect from the room
+                    Timber.d("Disconnecting from room...");
                     room.disconnect();
+                    Thread.sleep(2000); // Wait for disconnect to complete
                     Timber.d("Room disconnected successfully");
                 }
 
+                // Reset internal state
                 setConnected(false);
+
+                // Reset all camera-related singletons to prevent multiple camera sources
+                resetCameraSingletons();
+
+                Timber.d("Disconnect process completed");
+
             } catch (Exception e) {
-                Timber.e(e, "Error during disconnect");
+                Timber.e(e, "Error during disconnect process");
                 setConnected(false);
+                resetCameraSingletons();
             }
         }).start();
+    }
+
+    /**
+     * Resets camera singletons to prevent multiple camera sources
+     */
+    private void resetCameraSingletons() {
+        try {
+            com.satinavrobotics.satibot.livekit.stream.ArCameraProvider.reset();
+            com.satinavrobotics.satibot.livekit.stream.ArCameraSession.reset();
+            com.satinavrobotics.satibot.livekit.stream.ExternalCameraSession.resetSingleton();
+        } catch (Exception e) {
+            Timber.w(e, "Error resetting camera singletons");
+        }
     }
 
     public boolean isConnected() {
@@ -673,9 +884,23 @@ public class LiveKitServer  {
         return room != null && room.getState() == Room.State.CONNECTED;
     }
 
+    /**
+     * Checks if the room is in a state where streaming can be started.
+     *
+     * @return true if streaming can be started, false otherwise.
+     */
+    public boolean canStartStreaming() {
+        return room != null && room.getState() == Room.State.CONNECTED;
+    }
 
-
-
+    /**
+     * Gets the current room state safely.
+     *
+     * @return the current room state, or null if room is null.
+     */
+    public Room.State getCurrentRoomState() {
+        return room != null ? room.getState() : null;
+    }
 
     /**
      * Gets the current room state as a string.
@@ -749,12 +974,8 @@ public class LiveKitServer  {
      * This is a public wrapper around the existing pollForTokenAsync method.
      */
     public void refreshToken() {
-        Timber.d("Token refresh requested");
         pollForTokenAsync();
     }
-
-
-
     public String getCameraIdsJson() {
         CameraManager cameraManager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
         JSONObject cameraJson = new JSONObject();
@@ -772,7 +993,6 @@ public class LiveKitServer  {
                 if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_FRONT) {
                     frontId = cameraId;
                 } else {
-                    Timber.d("Focal length: %f", focalLength);
                     if (focalLength < 2.5) {
                         wideId = cameraId;
                     } else if (focalLength >= 2.5 && focalLength < 6.0) {
@@ -783,12 +1003,10 @@ public class LiveKitServer  {
                 }
             }
 
-            // Put values into JSON
             cameraJson.put("main", mainId);
             cameraJson.put("wide", wideId);
             cameraJson.put("telephoto", telephotoId);
             cameraJson.put("front", frontId);
-            Timber.d("Camera IDs: %s", cameraJson.toString());
 
         } catch (CameraAccessException e) {
             Timber.e("Error accessing camera");
@@ -801,6 +1019,8 @@ public class LiveKitServer  {
 
 
 
+
+
     /**
      * Reinitializes the LiveKitServer singleton by disconnecting, cleaning up, and creating a new instance.
      */
@@ -808,6 +1028,7 @@ public class LiveKitServer  {
         if (instance != null) {
             try {
                 instance.disconnect();
+                Thread.sleep(3000); // Wait longer for complete cleanup
             } catch (Exception ignored) {}
             instance = null;
         }
@@ -843,11 +1064,7 @@ public class LiveKitServer  {
                 Timber.e(error, "Failed to connect to room");
                 return;
             }
-            Timber.d("Connected to room successfully");
             setConnected(true);
-
-            // Note: Camera, microphone, and RPC methods are now handled by startStreaming() method
-            // This callback only handles the room connection itself
         }
     }
 
@@ -860,21 +1077,22 @@ public class LiveKitServer  {
                 Timber.e(error, "Failed to enable camera");
                 return;
             }
-            Timber.d("Camera enabled successfully");
 
-            // Retrieve the track publication after enabling the camera
-            // Attach the local video track to the renderer.
-
-            TrackPublication publication = room.getLocalParticipant().getTrackPublication(Track.Source.CAMERA);
-            Timber.d("Local video track publication: %s", publication);
-            if (publication != null) {
-                Timber.d("Local video track attached");
-                // The getTrackPublication() returns a publication from which you can retrieve the track.
-                // Casting is required if you know the type.
-                LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
-                if (localTrack != null) {
-                    attachLocalVideo(localTrack);
+            try {
+                LocalParticipant localParticipant = room.getLocalParticipant();
+                if (localParticipant == null) {
+                    return;
                 }
+
+                TrackPublication publication = localParticipant.getTrackPublication(Track.Source.CAMERA);
+                if (publication != null) {
+                    LocalVideoTrack localTrack = (LocalVideoTrack) publication.getTrack();
+                    if (localTrack != null) {
+                        attachLocalVideo(localTrack);
+                    }
+                }
+            } catch (Exception e) {
+                Timber.e(e, "Error in OnCameraConnected callback");
             }
         }
     }
@@ -885,9 +1103,7 @@ public class LiveKitServer  {
             if (result instanceof Result.Failure) {
                 Throwable error = ((Result.Failure) result).exception;
                 Timber.e(error, "Failed to enable microphone");
-                return;
             }
-            Timber.d("Microphone enabled successfully");
         }
     }
 

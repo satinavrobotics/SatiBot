@@ -272,12 +272,18 @@ abstract class CameraCapturer implements CameraVideoCapturer {
 
             if (this.currentSession != null) {
                 Logging.d(TAG, "Stop capture: Nulling session");
-                this.cameraStatistics.release();
-                this.cameraStatistics = null;
+                if (this.cameraStatistics != null) {
+                    this.cameraStatistics.release();
+                    this.cameraStatistics = null;
+                }
                 final CameraSession oldSession = this.currentSession;
                 this.cameraThreadHandler.post(new Runnable() {
                     public void run() {
-                        oldSession.stop();
+                        try {
+                            oldSession.stop();
+                        } catch (Exception e) {
+                            Logging.w(TAG, "Error stopping camera session: " + e.getMessage());
+                        }
                     }
                 });
                 this.currentSession = null;
@@ -400,7 +406,8 @@ abstract class CameraCapturer implements CameraVideoCapturer {
                 this.cameraName = selectedCameraName;
                 this.sessionOpening = true;
                 this.openAttemptsRemaining = MAX_OPEN_CAMERA_ATTEMPTS;
-                this.createSessionInternal(0);
+                // Add a small delay to allow the old session to stop properly
+                this.createSessionInternal(200);
             }
 
             Logging.d(TAG, "switchCamera done");

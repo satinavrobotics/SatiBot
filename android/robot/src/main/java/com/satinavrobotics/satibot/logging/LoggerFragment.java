@@ -1118,9 +1118,8 @@ public class LoggerFragment extends ControlsFragment implements ImageSourceHandl
     externalCameraImageSourceHandler = new ExternalCameraImageSourceHandler(arCore);
     externalCameraImageSourceHandler.setImageSourceListener(this);
     externalCameraImageSourceHandler.setBitmapRenderer(bitmapRenderer);
-    // Set a default capture URL - this could be made configurable via settings
-    externalCameraImageSourceHandler.setCaptureUrl("http://192.168.0.10/capture");
-    externalCameraImageSourceHandler.setCaptureInterval(100); // 100ms interval
+    // Set a default stream URL - this could be made configurable via settings
+    externalCameraImageSourceHandler.setStreamUrl("http://192.168.0.10:81/stream");
     externalCameraImageSourceHandler.initialize();
 
     // Set the initial image source handler - but don't start capture yet

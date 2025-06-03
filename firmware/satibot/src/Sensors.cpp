@@ -55,6 +55,10 @@ Sensors::Sensors(Config* config)
 }
 
 void Sensors::begin() {
+    // for battery sensor reads
+    analogSetAttenuation(ADC_11db);
+    analogReadResolution(12);
+
     // Initialize hall effect sensors (wheel encoders)
     pinMode(config->getPinHallL(), INPUT_PULLUP); // Left hall effect sensor
     pinMode(config->getPinHallR(), INPUT_PULLUP); // Right hall effect sensor

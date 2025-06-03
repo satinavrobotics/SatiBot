@@ -8,6 +8,12 @@
  */
 
 export function Buttons (connection, available_cameras) {
+  // Show buttons now that camera information has arrived
+  const buttonsContainer = document.getElementById('buttons');
+  if (buttonsContainer) {
+    buttonsContainer.style.display = 'flex';
+  }
+
   // MIRROR
   const toggleMirror = () => {
     const video = document.getElementById('video')
@@ -74,6 +80,7 @@ export function Buttons (connection, available_cameras) {
   const wideCameraButton = document.getElementById('camera_switch_wide')
   const telephotoCameraButton = document.getElementById('camera_switch_telephoto')
   const frontCameraButton = document.getElementById('camera_switch_front')
+  const externalCameraButton = document.getElementById('camera_switch_external')
   const arCameraButton = document.getElementById('camera_switch_ar')
 
   arCameraButton.onclick = () => connection.switchCamera("AR_CORE")
@@ -100,6 +107,13 @@ export function Buttons (connection, available_cameras) {
     frontCameraButton.onclick = () => connection.switchCamera(available_cameras.front)
   } else {
     frontCameraButton.remove();
+  }
+
+  if (available_cameras.hasOwnProperty("external")) {
+    externalCameraButton.onclick = () => connection.switchCamera(available_cameras.external)
+  } else {
+    // External camera button always available, uses "EXTERNAL" command
+    externalCameraButton.onclick = () => connection.switchCamera("EXTERNAL")
   }
 
   // fullscreen

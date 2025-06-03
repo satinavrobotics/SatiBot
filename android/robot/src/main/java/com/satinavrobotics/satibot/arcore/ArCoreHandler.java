@@ -245,28 +245,7 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
     }
 
     public void pause() {
-        if (session != null) {
-            try {
-                // First pause the display rotation helper and GLSurfaceView
-                displayRotationHelper.onPause();
-                glSurfaceView.onPause();
-
-                // Then pause the session with error handling
-                try {
-                    session.pause();
-                } catch (Exception e) {
-                    // Catch and log any exceptions during session pause
-                    Timber.e(e, "Error pausing ARCore session");
-                }
-
-                // Clean up map resolving manager
-                mapResolvingManager.clear();
-                isResolvingAnchors = false;
-            } catch (Exception e) {
-                // Catch any other exceptions during the entire pause process
-                Timber.e(e, "Exception during ARCore pause");
-            }
-        }
+        pauseWithErrorHandling();
     }
 
 
@@ -279,8 +258,8 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
         if (session != null) {
             runOnMainThread(() -> {
                 try {
-                    // First pause the session
-                    pause();
+                    // First pause the session with enhanced error handling
+                    pauseWithErrorHandling();
                     mapResolvingManager.clear();
 
                     // Close the session with error handling
@@ -288,7 +267,6 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
                         try {
                             session.close();
                         } catch (Exception e) {
-                            // Catch and log any exceptions during session close
                             Timber.e(e, "Error closing ARCore session");
                         } finally {
                             session = null;
@@ -309,6 +287,34 @@ public class ArCoreHandler implements GLSurfaceView.Renderer {
             // Session is already null, call completion callback immediately
             if (onComplete != null) {
                 onComplete.run();
+            }
+        }
+    }
+
+    /**
+     * Enhanced pause method with better error handling for camera operations
+     */
+    private void pauseWithErrorHandling() {
+        if (session != null) {
+            try {
+                // First pause the display rotation helper and GLSurfaceView
+                displayRotationHelper.onPause();
+                glSurfaceView.onPause();
+
+                // Then pause the session with error handling
+                try {
+                    session.pause();
+                } catch (Exception e) {
+                    Timber.e(e, "Error pausing ARCore session: %s", e.getMessage());
+                    // Continue with cleanup even if pause fails
+                }
+
+                // Clean up map resolving manager
+                mapResolvingManager.clear();
+                isResolvingAnchors = false;
+            } catch (Exception e) {
+                // Catch any other exceptions during the entire pause process
+                Timber.e(e, "Exception during ARCore pause: %s", e.getMessage());
             }
         }
     }
