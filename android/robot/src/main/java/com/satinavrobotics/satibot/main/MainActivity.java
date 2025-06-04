@@ -50,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
   private BottomNavigationView bottomNavigationView;
   private NavController navController;
   private LiveKitServer liveKitServer;
+  private LiveKitServer.ConnectionStateListener connectionStateListener;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -176,12 +177,14 @@ public class MainActivity extends AppCompatActivity {
 
           // To update the toolbar icon according to the Fragment.
           Menu menu = toolbar.getMenu();
-          if (vehicle.getConnectionType().equals("Bluetooth")) {
-            menu.findItem(R.id.bluetoothFragment).setVisible(true);
+          if (menu != null) {
+            if (vehicle.getConnectionType().equals("Bluetooth")) {
+              menu.findItem(R.id.bluetoothFragment).setVisible(true);
+            }
+            menu.findItem(R.id.settingsFragment).setVisible(true);
+            menu.findItem(R.id.liveKitInfoFragment).setVisible(true);
+            updateLiveKitIcon(menu);
           }
-          menu.findItem(R.id.settingsFragment).setVisible(true);
-          menu.findItem(R.id.liveKitInfoFragment).setVisible(true);
-          updateLiveKitIcon(menu);
         });
 
     //    if (savedInstanceState == null) {
@@ -206,6 +209,11 @@ public class MainActivity extends AppCompatActivity {
     // Update LiveKit and Bluetooth icons
     updateLiveKitIcon(menu);
     updateBluetoothIcon(menu);
+
+    // Force LiveKit connection state update now that menu is ready
+    if (liveKitServer != null) {
+      liveKitServer.forceConnectionStateUpdate();
+    }
 
     return true;
   }
@@ -259,6 +267,12 @@ public class MainActivity extends AppCompatActivity {
     unregisterReceiver(localBroadcastReceiver);
     if (localBroadcastReceiver != null) localBroadcastReceiver = null;
     if (!isChangingConfigurations()) vehicle.disconnectUsb();
+
+    // Clean up LiveKit connection state listener
+    if (liveKitServer != null && connectionStateListener != null) {
+      liveKitServer.removeConnectionStateListener(connectionStateListener);
+    }
+
     super.onDestroy();
   }
 
@@ -268,18 +282,35 @@ public class MainActivity extends AppCompatActivity {
     // Start periodic updates of LiveKit and Bluetooth icons
     startIconUpdates();
 
-    // Attempt to reconnect LiveKit if it was previously connected but is now disconnected
-    attemptLiveKitReconnection();
+    // Notify LiveKit server about app resume
+    if (liveKitServer != null) {
+      liveKitServer.onAppResumed();
+    }
   }
 
   @Override
   protected void onPause() {
     super.onPause();
+    // Notify LiveKit server about app pause
+    if (liveKitServer != null) {
+      liveKitServer.onAppPaused();
+    }
   }
 
   private void initializeLiveKitServer() {
     try {
       liveKitServer = LiveKitServer.getInstance(this);
+
+      // Create and store connection state listener for immediate UI updates
+      connectionStateListener = (connected, roomState) -> {
+        runOnUiThread(() -> {
+          Toolbar toolbar = findViewById(R.id.toolbar);
+          if (toolbar != null && toolbar.getMenu() != null) {
+            updateLiveKitIconWithState(toolbar.getMenu(), connected);
+          }
+        });
+      };
+      liveKitServer.addConnectionStateListener(connectionStateListener);
 
       // Auto-connect if permissions are available and internet is connected
       if (PermissionUtils.hasControllerPermissions(this) &&
@@ -294,10 +325,15 @@ public class MainActivity extends AppCompatActivity {
   }
 
   private void updateLiveKitIcon(Menu menu) {
+    if (liveKitServer != null) {
+      updateLiveKitIconWithState(menu, liveKitServer.isRoomConnected());
+    }
+  }
+
+  private void updateLiveKitIconWithState(Menu menu, boolean connected) {
     MenuItem liveKitItem = menu.findItem(R.id.liveKitInfoFragment);
-    if (liveKitItem != null && liveKitServer != null) {
-      boolean isConnected = liveKitServer.isRoomConnected();
-      liveKitItem.setIcon(isConnected ?
+    if (liveKitItem != null) {
+      liveKitItem.setIcon(connected ?
         R.drawable.ic_livekit_connected :
         R.drawable.ic_livekit_disconnected);
     }
@@ -314,14 +350,13 @@ public class MainActivity extends AppCompatActivity {
   }
 
   private void startIconUpdates() {
-    // Update LiveKit and Bluetooth icons every 3 seconds
+    // Update Bluetooth icon every 3 seconds (LiveKit icon is now updated via listener)
     Runnable updateRunnable = new Runnable() {
       @Override
       public void run() {
         if (!isDestroyed() && !isFinishing()) {
           Toolbar toolbar = findViewById(R.id.toolbar);
           if (toolbar != null) {
-            updateLiveKitIcon(toolbar.getMenu());
             updateBluetoothIcon(toolbar.getMenu());
           }
           // Schedule next update
@@ -333,30 +368,6 @@ public class MainActivity extends AppCompatActivity {
     Toolbar toolbar = findViewById(R.id.toolbar);
     if (toolbar != null) {
       toolbar.post(updateRunnable);
-    }
-  }
-
-  private void attemptLiveKitReconnection() {
-    if (liveKitServer == null) {
-      return;
-    }
-
-    // Only attempt reconnection if we have the necessary permissions and internet connectivity
-    if (PermissionUtils.hasControllerPermissions(this) &&
-        ConnectionUtils.isInternetAvailable(this)) {
-
-      // Check if LiveKit is currently disconnected
-      if (!liveKitServer.isRoomConnected()) {
-        Timber.d("Attempting to reconnect LiveKit after app resume");
-        liveKitServer.connect();
-      }
-    } else {
-      if (!ConnectionUtils.isInternetAvailable(this)) {
-        Timber.w("No internet connection available, skipping LiveKit reconnection");
-      }
-      if (!PermissionUtils.hasControllerPermissions(this)) {
-        Timber.w("Missing permissions, skipping LiveKit reconnection");
-      }
     }
   }
 }

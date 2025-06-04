@@ -49,8 +49,11 @@ public class SharedPreferencesManager {
   private static final String ROBOT_WIDTH_METERS = "ROBOT_WIDTH_METERS";
   private static final float DEFAULT_ROBOT_WIDTH_METERS = 0.4f;
 
-  private static final String CLOSER_NEXT_THRESHOLD = "CLOSER_NEXT_THRESHOLD";
-  private static final float DEFAULT_CLOSER_NEXT_THRESHOLD = 20.0f;
+  private static final String VERTICAL_CLOSER_THRESHOLD = "VERTICAL_CLOSER_THRESHOLD";
+  private static final float DEFAULT_VERTICAL_CLOSER_THRESHOLD = 20.0f;
+
+  private static final String VERTICAL_FARTHER_THRESHOLD = "VERTICAL_FARTHER_THRESHOLD";
+  private static final float DEFAULT_VERTICAL_FARTHER_THRESHOLD = 100.0f;
 
   private static final String MAX_SAFE_DISTANCE = "MAX_SAFE_DISTANCE";
   private static final float DEFAULT_MAX_SAFE_DISTANCE = 5000.0f;
@@ -69,6 +72,9 @@ public class SharedPreferencesManager {
 
   private static final String CONFIDENCE_THRESHOLD = "CONFIDENCE_THRESHOLD";
   private static final float DEFAULT_CONFIDENCE_THRESHOLD = 0.5f;
+
+  private static final String TOO_CLOSE_THRESHOLD = "TOO_CLOSE_THRESHOLD";
+  private static final float DEFAULT_TOO_CLOSE_THRESHOLD = 1000.0f; // 100cm in millimeters
 
   // Logger fragment preferences
   private static final String LOGGER_RESOLUTION = "LOGGER_RESOLUTION";
@@ -298,21 +304,39 @@ public class SharedPreferencesManager {
   }
 
   /**
-   * Get the closer next threshold in millimeters
+   * Get the vertical closer threshold in millimeters
    *
-   * @return The closer next threshold in millimeters
+   * @return The vertical closer threshold in millimeters
    */
-  public float getCloserNextThreshold() {
-    return preferences.getFloat(CLOSER_NEXT_THRESHOLD, DEFAULT_CLOSER_NEXT_THRESHOLD);
+  public float getVerticalCloserThreshold() {
+    return preferences.getFloat(VERTICAL_CLOSER_THRESHOLD, DEFAULT_VERTICAL_CLOSER_THRESHOLD);
   }
 
   /**
-   * Set the closer next threshold in millimeters
+   * Set the vertical closer threshold in millimeters
    *
-   * @param thresholdMm The closer next threshold in millimeters
+   * @param thresholdMm The vertical closer threshold in millimeters
    */
-  public void setCloserNextThreshold(float thresholdMm) {
-    preferences.edit().putFloat(CLOSER_NEXT_THRESHOLD, thresholdMm).apply();
+  public void setVerticalCloserThreshold(float thresholdMm) {
+    preferences.edit().putFloat(VERTICAL_CLOSER_THRESHOLD, thresholdMm).apply();
+  }
+
+  /**
+   * Get the vertical farther threshold in millimeters
+   *
+   * @return The vertical farther threshold in millimeters
+   */
+  public float getVerticalFartherThreshold() {
+    return preferences.getFloat(VERTICAL_FARTHER_THRESHOLD, DEFAULT_VERTICAL_FARTHER_THRESHOLD);
+  }
+
+  /**
+   * Set the vertical farther threshold in millimeters
+   *
+   * @param thresholdMm The vertical farther threshold in millimeters
+   */
+  public void setVerticalFartherThreshold(float thresholdMm) {
+    preferences.edit().putFloat(VERTICAL_FARTHER_THRESHOLD, thresholdMm).apply();
   }
 
   /**
@@ -421,6 +445,24 @@ public class SharedPreferencesManager {
    */
   public void setConfidenceThreshold(float threshold) {
     preferences.edit().putFloat(CONFIDENCE_THRESHOLD, threshold).apply();
+  }
+
+  /**
+   * Get the too close threshold in millimeters
+   *
+   * @return The too close threshold in millimeters
+   */
+  public float getTooCloseThreshold() {
+    return preferences.getFloat(TOO_CLOSE_THRESHOLD, DEFAULT_TOO_CLOSE_THRESHOLD);
+  }
+
+  /**
+   * Set the too close threshold in millimeters
+   *
+   * @param thresholdMm The too close threshold in millimeters
+   */
+  public void setTooCloseThreshold(float thresholdMm) {
+    preferences.edit().putFloat(TOO_CLOSE_THRESHOLD, thresholdMm).apply();
   }
 
   /**

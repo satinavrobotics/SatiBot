@@ -26,21 +26,25 @@ public class RobotParametersManager {
     private float robotWidthMeters = 0.4f; // Default robot width in meters
 
     // Navigation threshold parameters
-    public static final float DEFAULT_CLOSER_NEXT_THRESHOLD = 20.0f; // Default threshold in mm
+    public static final float DEFAULT_VERTICAL_CLOSER_THRESHOLD = 20.0f; // Default threshold in mm
+    public static final float DEFAULT_VERTICAL_FARTHER_THRESHOLD = 100.0f; // Default threshold in mm
     public static final float DEFAULT_MAX_SAFE_DISTANCE = 5000.0f; // Default 3m in mm
     public static final int DEFAULT_CONSECUTIVE_THRESHOLD = 3; // Default consecutive pixels threshold
     public static final int DEFAULT_DOWNSAMPLE_FACTOR = 8; // Default downsample factor
     public static final float DEFAULT_DEPTH_GRADIENT_THRESHOLD = 200.0f; // Default horizontal gradient threshold in mm
     public static final int DEFAULT_NAVIGABILITY_THRESHOLD = 3; // Default navigability threshold (5% obstacles)
     public static final float DEFAULT_CONFIDENCE_THRESHOLD = 0.5f; // Default confidence threshold (0.0-1.0)
+    public static final float DEFAULT_TOO_CLOSE_THRESHOLD = 1000.0f; // Default too close threshold (100cm in mm)
 
-    private float closerNextThreshold = DEFAULT_CLOSER_NEXT_THRESHOLD;
+    private float verticalCloserThreshold = DEFAULT_VERTICAL_CLOSER_THRESHOLD;
+    private float verticalFartherThreshold = DEFAULT_VERTICAL_FARTHER_THRESHOLD;
     private float maxSafeDistance = DEFAULT_MAX_SAFE_DISTANCE;
     private int consecutiveThreshold = DEFAULT_CONSECUTIVE_THRESHOLD;
     private int downsampleFactor = DEFAULT_DOWNSAMPLE_FACTOR;
     private float depthGradientThreshold = DEFAULT_DEPTH_GRADIENT_THRESHOLD;
     private int navigabilityThreshold = DEFAULT_NAVIGABILITY_THRESHOLD;
     private float confidenceThreshold = DEFAULT_CONFIDENCE_THRESHOLD;
+    private float tooCloseThreshold = DEFAULT_TOO_CLOSE_THRESHOLD;
 
     // Camera intrinsics
     private CameraIntrinsics cameraIntrinsics;
@@ -100,18 +104,20 @@ public class RobotParametersManager {
 
         // Load all parameters from SharedPreferences
         robotWidthMeters = sharedPreferencesManager.getRobotWidthMeters();
-        closerNextThreshold = sharedPreferencesManager.getCloserNextThreshold();
+        verticalCloserThreshold = sharedPreferencesManager.getVerticalCloserThreshold();
+        verticalFartherThreshold = sharedPreferencesManager.getVerticalFartherThreshold();
         maxSafeDistance = sharedPreferencesManager.getMaxSafeDistance();
         consecutiveThreshold = sharedPreferencesManager.getConsecutiveThreshold();
         downsampleFactor = sharedPreferencesManager.getDownsampleFactor();
         depthGradientThreshold = sharedPreferencesManager.getDepthGradientThreshold();
         navigabilityThreshold = sharedPreferencesManager.getNavigabilityThreshold();
         confidenceThreshold = sharedPreferencesManager.getConfidenceThreshold();
+        tooCloseThreshold = sharedPreferencesManager.getTooCloseThreshold();
 
         Timber.d("Loaded parameters from SharedPreferences: " +
-                "robotWidth=%.2fm, closerNext=%.1fmm, maxSafe=%.1fmm, consecutive=%d, " +
+                "robotWidth=%.2fm, verticalCloser=%.1fmm, verticalFarther=%.1fmm, maxSafe=%.1fmm, consecutive=%d, " +
                 "downsample=%d, depthGradient=%.1fmm, navigability=%d%%",
-                robotWidthMeters, closerNextThreshold, maxSafeDistance, consecutiveThreshold,
+                robotWidthMeters, verticalCloserThreshold, verticalFartherThreshold, maxSafeDistance, consecutiveThreshold,
                 downsampleFactor, depthGradientThreshold, navigabilityThreshold);
     }
 
@@ -126,13 +132,15 @@ public class RobotParametersManager {
 
         // Save all parameters to SharedPreferences
         sharedPreferencesManager.setRobotWidthMeters(robotWidthMeters);
-        sharedPreferencesManager.setCloserNextThreshold(closerNextThreshold);
+        sharedPreferencesManager.setVerticalCloserThreshold(verticalCloserThreshold);
+        sharedPreferencesManager.setVerticalFartherThreshold(verticalFartherThreshold);
         sharedPreferencesManager.setMaxSafeDistance(maxSafeDistance);
         sharedPreferencesManager.setConsecutiveThreshold(consecutiveThreshold);
         sharedPreferencesManager.setDownsampleFactor(downsampleFactor);
         sharedPreferencesManager.setDepthGradientThreshold(depthGradientThreshold);
         sharedPreferencesManager.setNavigabilityThreshold(navigabilityThreshold);
         sharedPreferencesManager.setConfidenceThreshold(confidenceThreshold);
+        sharedPreferencesManager.setTooCloseThreshold(tooCloseThreshold);
 
         Timber.d("Saved parameters to SharedPreferences");
     }
@@ -278,28 +286,54 @@ public class RobotParametersManager {
 
 
     /**
-     * Get the closer next threshold in millimeters.
-     * This threshold determines when a pixel is considered to be "closer next"
+     * Get the vertical closer threshold in millimeters.
+     * This threshold determines when a pixel is considered to be "vertically closer"
      * based on the difference in depth between consecutive pixels.
      *
-     * @return Closer next threshold in millimeters
+     * @return Vertical closer threshold in millimeters
      */
-    public float getCloserNextThreshold() {
-        return closerNextThreshold;
+    public float getVerticalCloserThreshold() {
+        return verticalCloserThreshold;
     }
 
     /**
-     * Set the closer next threshold in millimeters.
+     * Set the vertical closer threshold in millimeters.
      *
      * @param thresholdMm Threshold in millimeters
      */
-    public void setCloserNextThreshold(float thresholdMm) {
-        this.closerNextThreshold = Math.max(1.0f, thresholdMm); // Ensure minimum threshold
-        Timber.d("Set closer next threshold to %.2f mm", this.closerNextThreshold);
+    public void setVerticalCloserThreshold(float thresholdMm) {
+        this.verticalCloserThreshold = Math.max(1.0f, thresholdMm); // Ensure minimum threshold
+        Timber.d("Set vertical closer threshold to %.2f mm", this.verticalCloserThreshold);
 
         // Save to SharedPreferences
         if (sharedPreferencesManager != null) {
-            sharedPreferencesManager.setCloserNextThreshold(this.closerNextThreshold);
+            sharedPreferencesManager.setVerticalCloserThreshold(this.verticalCloserThreshold);
+        }
+    }
+
+    /**
+     * Get the vertical farther threshold in millimeters.
+     * This threshold determines when a pixel is considered to be "vertically farther"
+     * based on the difference in depth between consecutive pixels.
+     *
+     * @return Vertical farther threshold in millimeters
+     */
+    public float getVerticalFartherThreshold() {
+        return verticalFartherThreshold;
+    }
+
+    /**
+     * Set the vertical farther threshold in millimeters.
+     *
+     * @param thresholdMm Threshold in millimeters
+     */
+    public void setVerticalFartherThreshold(float thresholdMm) {
+        this.verticalFartherThreshold = Math.max(1.0f, thresholdMm); // Ensure minimum threshold
+        Timber.d("Set vertical farther threshold to %.2f mm", this.verticalFartherThreshold);
+
+        // Save to SharedPreferences
+        if (sharedPreferencesManager != null) {
+            sharedPreferencesManager.setVerticalFartherThreshold(this.verticalFartherThreshold);
         }
     }
 
@@ -490,6 +524,31 @@ public class RobotParametersManager {
         // Save to SharedPreferences
         if (sharedPreferencesManager != null) {
             sharedPreferencesManager.setConfidenceThreshold(this.confidenceThreshold);
+        }
+    }
+
+    /**
+     * Get the too close threshold for depth processing.
+     * This threshold determines which depth values are considered "too close" for safe navigation.
+     *
+     * @return Too close threshold in millimeters
+     */
+    public float getTooCloseThreshold() {
+        return tooCloseThreshold;
+    }
+
+    /**
+     * Set the too close threshold for depth processing.
+     *
+     * @param thresholdMm Too close threshold in millimeters
+     */
+    public void setTooCloseThreshold(float thresholdMm) {
+        this.tooCloseThreshold = Math.max(10.0f, thresholdMm); // Ensure minimum threshold (1cm)
+        Timber.d("Set too close threshold to %.2f mm", this.tooCloseThreshold);
+
+        // Save to SharedPreferences
+        if (sharedPreferencesManager != null) {
+            sharedPreferencesManager.setTooCloseThreshold(this.tooCloseThreshold);
         }
     }
 }

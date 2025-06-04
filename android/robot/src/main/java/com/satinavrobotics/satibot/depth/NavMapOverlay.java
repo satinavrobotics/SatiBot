@@ -162,7 +162,7 @@ public class NavMapOverlay {
             }
 
             // Get gradient information
-            final boolean[][] closerNextInfo = depthProcessor.getCloserNextPixelInfo();
+            final boolean[][] closerNextInfo = depthProcessor.getVerticalCloserPixelInfo();
             if (closerNextInfo == null) {
                 return;
             }

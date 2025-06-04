@@ -36,9 +36,11 @@ public class DepthProcessor implements ArCoreProcessor {
     // Depth image generator
     private DepthImageGenerator depthImageGenerator;
     private float confidenceThreshold = 0.5f;
+    private float tooCloseThreshold = 1000.0f; // Default 100cm in millimeters
 
     private final float depthGradientThreshold; // Threshold for depth discontinuity
-    private final float closerNextThreshold; // Threshold for considering a pixel as "closer next"
+    private final float verticalCloserThreshold; // Threshold for considering a pixel as "vertically closer"
+    private final float verticalFartherThreshold; // Threshold for considering a pixel as "vertically farther"
     private final float maxSafeDistance; // Maximum safe distance for navigation
     private final int consecutiveThreshold;
 
@@ -53,8 +55,10 @@ public class DepthProcessor implements ArCoreProcessor {
     // Depth data for visualization
     private short[][] lastDepthArray;
     private short[][] filteredDepthArray; // Median-filtered depth array
-    private boolean[][] lastCloserNextPixel; // Tracks pixels where next depth is closer (potential drop-offs)
+    private boolean[][] lastVerticalCloserPixel; // Tracks pixels where next depth is closer (potential drop-offs)
+    private boolean[][] lastVerticalFartherPixel; // Tracks pixels where next depth is farther (potential step-ups)
     private boolean[][] lastHorizontalGradientPixel; // Tracks pixels where horizontal gradient surpasses threshold
+    private boolean[][] lastTooClosePixel; // Tracks pixels that are too close for safe navigation
 
     // Navigability maps for left and right windows
     private static final int NUM_ROWS = 12;
@@ -71,18 +75,22 @@ public class DepthProcessor implements ArCoreProcessor {
     public DepthProcessor() {
         // Get parameters from RobotParametersManager if available, otherwise use defaults
         RobotParametersManager robotParams = RobotParametersManager.getInstance();
-        float closerNextThreshold = robotParams.getCloserNextThreshold();
+        float verticalCloserThreshold = robotParams.getVerticalCloserThreshold();
+        float verticalFartherThreshold = robotParams.getVerticalFartherThreshold();
         float maxSafeDistance = robotParams.getMaxSafeDistance();
         int consecutiveThreshold = robotParams.getConsecutiveThreshold();
         int downsampleFactor = robotParams.getDownsampleFactor();
         float depthGradientThreshold = robotParams.getDepthGradientThreshold();
+        float tooCloseThreshold = robotParams.getTooCloseThreshold();
 
         // Initialize with parameters
         this.depthGradientThreshold = depthGradientThreshold;
-        this.closerNextThreshold = closerNextThreshold;
+        this.verticalCloserThreshold = verticalCloserThreshold;
+        this.verticalFartherThreshold = verticalFartherThreshold;
         this.maxSafeDistance = maxSafeDistance;
         this.consecutiveThreshold = consecutiveThreshold;
         this.downsampleFactor = downsampleFactor;
+        this.tooCloseThreshold = tooCloseThreshold;
         this.depthWidth = 0;
         this.depthHeight = 0;
 
@@ -90,9 +98,9 @@ public class DepthProcessor implements ArCoreProcessor {
         processingExecutor = Executors.newSingleThreadExecutor();
 
         Timber.d("Created PolarHistogramGenerator with parameters from RobotParametersManager: " +
-                "closerNextThreshold=%.2f mm, maxSafeDistance=%.2f mm, consecutiveThreshold=%d pixels, " +
+                "verticalCloserThreshold=%.2f mm, verticalFartherThreshold=%.2f mm, maxSafeDistance=%.2f mm, consecutiveThreshold=%d pixels, " +
                 "downsampleFactor=%d, depthGradientThreshold=%.2f mm",
-                closerNextThreshold, maxSafeDistance, consecutiveThreshold,
+                verticalCloserThreshold, verticalFartherThreshold, maxSafeDistance, consecutiveThreshold,
                 downsampleFactor, depthGradientThreshold);
     }
 
@@ -111,7 +119,20 @@ public class DepthProcessor implements ArCoreProcessor {
         }
 
         // Update the depth image generator with the frame
-        boolean updated = depthImageGenerator.update(frame);
+        boolean updated = false;
+        try {
+            updated = depthImageGenerator.update(frame);
+        } catch (Exception e) {
+            Timber.e(e, "Error updating depth image generator: %s", e.getMessage());
+
+            // If this is an ONNX generator and it's failing, we should notify the UI
+            // to potentially switch to a more stable depth source
+            if (depthImageGenerator instanceof com.satinavrobotics.satibot.depth.depth_sources.ONNXDepthImageGenerator) {
+                Timber.w("ONNX depth generator failed, consider switching to ARCore depth");
+                // We could add a callback here to notify the UI about the failure
+            }
+            return false;
+        }
 
         if (!updated) {
             // No new depth data available
@@ -123,17 +144,14 @@ public class DepthProcessor implements ArCoreProcessor {
     }
 
     /**
-     * Updates the depth data processing to detect isCloserNext gradients.
+     * Updates the depth data processing to detect vertical closer and farther gradients.
      *
      * @param depthGenerator The depth image generator providing the depth data
      * @param confidenceThreshold Threshold for confidence values (0.0-1.0)
      * @return true if the processing was updated successfully
      */
     public boolean update(DepthImageGenerator depthGenerator, float confidenceThreshold) {
-        // Allow processing even if another thread is processing
-        // This ensures we always get the latest data
         if (depthGenerator == null || !depthGenerator.isInitialized()) {
-            Timber.w("Depth generator not initialized");
             return false;
         }
 
@@ -141,7 +159,6 @@ public class DepthProcessor implements ArCoreProcessor {
         ByteBuffer confidenceBuffer = depthGenerator.getConfidenceImageData();
 
         if (depthBuffer == null || confidenceBuffer == null) {
-            Timber.w("Depth or confidence buffer not available");
             return false;
         }
 
@@ -149,19 +166,16 @@ public class DepthProcessor implements ArCoreProcessor {
         depthHeight = depthGenerator.getHeight();
 
         if (depthWidth <= 0 || depthHeight <= 0) {
-            Timber.e("Invalid depth image dimensions: %d x %d", depthWidth, depthHeight);
             return false;
         }
 
         isProcessing.set(true);
 
         try {
-            // Process depth data to detect isCloserNext gradients
             processDepthData(depthBuffer, confidenceBuffer, confidenceThreshold);
             isProcessing.set(false);
             return true;
         } catch (Exception e) {
-            Timber.e(e, "Error processing depth data: %s", e.getMessage());
             isProcessing.set(false);
             return false;
         }
@@ -182,7 +196,6 @@ public class DepthProcessor implements ArCoreProcessor {
         ByteBuffer confidenceBuffer = depthImageGenerator.getConfidenceImageData();
 
         if (depthBuffer == null || confidenceBuffer == null) {
-            Timber.w("Depth or confidence buffer not available");
             return false;
         }
 
@@ -190,19 +203,16 @@ public class DepthProcessor implements ArCoreProcessor {
         depthHeight = depthImageGenerator.getHeight();
 
         if (depthWidth <= 0 || depthHeight <= 0) {
-            Timber.e("Invalid depth image dimensions: %d x %d", depthWidth, depthHeight);
             return false;
         }
 
         isProcessing.set(true);
 
         try {
-            // Process depth data to detect isCloserNext gradients
             processDepthData(depthBuffer, confidenceBuffer, confidenceThreshold);
             isProcessing.set(false);
             return true;
         } catch (Exception e) {
-            Timber.e(e, "Error processing depth data: %s", e.getMessage());
             isProcessing.set(false);
             return false;
         }
@@ -210,9 +220,9 @@ public class DepthProcessor implements ArCoreProcessor {
 
 
     /**
-     * Processes depth data to detect isCloserNext gradients for visualization.
+     * Processes depth data to detect vertical closer and farther gradients for visualization.
      * Optimized for performance to ensure real-time visualization.
-     * Only marks pixels as isCloserNext when there's a consistent tendency of pixels getting closer,
+     * Only marks pixels as vertically closer/farther when there's a consistent tendency of pixels getting closer/farther,
      * rather than marking individual noisy values.
      * Uses downsampling to improve performance.
      *
@@ -225,13 +235,10 @@ public class DepthProcessor implements ArCoreProcessor {
         depthBuffer.rewind();
         confidenceBuffer.rewind();
 
-        // Convert to ShortBuffer for easier access to 16-bit depth values
         ShortBuffer depthShortBuffer = depthBuffer.asShortBuffer();
 
-        // Make sure we have valid dimensions
         if (depthWidth <= 0 || depthHeight <= 0 ||
             depthShortBuffer.capacity() <= 0 || confidenceBuffer.capacity() <= 0) {
-            Timber.e("Invalid dimensions or empty buffers, cannot process depth data");
             return;
         }
 
@@ -240,13 +247,17 @@ public class DepthProcessor implements ArCoreProcessor {
             lastDepthArray[0].length != depthWidth) {
             lastDepthArray = new short[depthHeight][depthWidth];
             filteredDepthArray = new short[depthHeight][depthWidth];
-            lastCloserNextPixel = new boolean[depthHeight][depthWidth];
+            lastVerticalCloserPixel = new boolean[depthHeight][depthWidth];
+            lastVerticalFartherPixel = new boolean[depthHeight][depthWidth];
             lastHorizontalGradientPixel = new boolean[depthHeight][depthWidth];
+            lastTooClosePixel = new boolean[depthHeight][depthWidth];
         } else {
-            // Clear the closer next pixel array for reuse
+            // Clear the pixel arrays for reuse
             for (int y = 0; y < depthHeight; y++) {
-                Arrays.fill(lastCloserNextPixel[y], false);
+                Arrays.fill(lastVerticalCloserPixel[y], false);
+                Arrays.fill(lastVerticalFartherPixel[y], false);
                 Arrays.fill(lastHorizontalGradientPixel[y], false);
+                Arrays.fill(lastTooClosePixel[y], false);
             }
         }
 
@@ -263,32 +274,25 @@ public class DepthProcessor implements ArCoreProcessor {
 
         // Apply downsampling using mean values
         if (downsampleFactor > 1) {
-            // Calculate downsampled dimensions
             int downsampledWidth = depthWidth / downsampleFactor;
             int downsampledHeight = depthHeight / downsampleFactor;
-
-            Timber.d("Downsampling depth image by factor %d: %dx%d -> %dx%d",
-                    downsampleFactor, depthWidth, depthHeight, downsampledWidth, downsampledHeight);
 
             // Create a downsampled depth array using the dedicated method
             short[][] downsampledDepthArray = downsampleDepthArray(lastDepthArray, depthWidth, depthHeight, downsampleFactor);
 
-            // Create a downsampled isCloserNext array
-            boolean[][] downsampledCloserNextPixel = new boolean[downsampledHeight][downsampledWidth];
+            // Create downsampled vertical closer and farther arrays
+            boolean[][] downsampledVerticalCloserPixel = new boolean[downsampledHeight][downsampledWidth];
+            boolean[][] downsampledVerticalFartherPixel = new boolean[downsampledHeight][downsampledWidth];
 
-            // Process depth gradients on the downsampled array
-            // Compute closer next pixels using the dedicated method
-            // Adjust the consecutive threshold based on the downsampling factor
             int adjustedThreshold = Math.max(1, consecutiveThreshold / downsampleFactor);
-            downsampledCloserNextPixel = computeCloserNextPixels(
+            processVerticalGradientsUnified(
                     downsampledDepthArray,
                     downsampledWidth,
                     downsampledHeight,
                     adjustedThreshold,
-                    closerNextThreshold,
-                    maxSafeDistance);
+                    downsampledVerticalCloserPixel,
+                    downsampledVerticalFartherPixel);
 
-            // TODO: itt miért map-eljük vissza?
             // Map the downsampled results back to the original resolution
             for (int y = 0; y < depthHeight; y++) {
                 for (int x = 0; x < depthWidth; x++) {
@@ -298,8 +302,9 @@ public class DepthProcessor implements ArCoreProcessor {
 
                     // Check bounds to avoid index out of range
                     if (downsampledY < downsampledHeight && downsampledX < downsampledWidth) {
-                        // Copy the result from the downsampled array
-                        lastCloserNextPixel[y][x] = downsampledCloserNextPixel[downsampledY][downsampledX];
+                        // Copy the results from the downsampled arrays
+                        lastVerticalCloserPixel[y][x] = downsampledVerticalCloserPixel[downsampledY][downsampledX];
+                        lastVerticalFartherPixel[y][x] = downsampledVerticalFartherPixel[downsampledY][downsampledX];
                     }
                 }
             }
@@ -316,8 +321,8 @@ public class DepthProcessor implements ArCoreProcessor {
                 }
             }
 
-            // Process horizontal gradients even in downsampled case
-            processHorizontalGradients();
+            // Process all filtered depth checks in unified manner (too close + horizontal gradients)
+            processFilteredDepthChecksUnified();
 
             // Compute left and right navigability maps
             computeLeftRightNavigabilityMaps();
@@ -327,24 +332,17 @@ public class DepthProcessor implements ArCoreProcessor {
                 System.arraycopy(lastDepthArray[y], 0, filteredDepthArray[y], 0, depthWidth);
             }
 
-            // Process depth gradients along vertical scanlines
-            // Compute closer next pixels using the dedicated method
-            boolean[][] closerNextPixels = computeCloserNextPixels(
+            // Process vertical gradients using unified method
+            processVerticalGradientsUnified(
                     filteredDepthArray,
                     depthWidth,
                     depthHeight,
                     consecutiveThreshold,
-                    closerNextThreshold,
-                    maxSafeDistance);
+                    lastVerticalCloserPixel,
+                    lastVerticalFartherPixel);
 
-            // Copy the results to the lastCloserNextPixel array
-            for (int y = 0; y < depthHeight; y++) {
-                if (depthWidth >= 0)
-                    System.arraycopy(closerNextPixels[y], 0, lastCloserNextPixel[y], 0, depthWidth);
-            }
-
-            // Process horizontal gradients
-            processHorizontalGradients();
+            // Process all filtered depth checks in unified manner (too close + horizontal gradients)
+            processFilteredDepthChecksUnified();
 
             // Compute left and right navigability maps
             computeLeftRightNavigabilityMaps();
@@ -427,10 +425,218 @@ public class DepthProcessor implements ArCoreProcessor {
             }
         }
 
-        Timber.d("Detected %d horizontal gradient pixels", gradientCount);
+
     }
 
 
+
+    /**
+     * Processes all filtered depth checks in a unified manner using a single loop.
+     * This method combines too close detection and horizontal gradient detection
+     * to improve performance by reducing redundant iterations over the filtered depth array.
+     * Both checks use the filteredDepthArray for consistency.
+     */
+    private void processFilteredDepthChecksUnified() {
+        if (filteredDepthArray == null || depthWidth <= 0 || depthHeight <= 0) {
+            return;
+        }
+
+        // Handle horizontal gradients disabled case
+        boolean processHorizontalGradients = horizontalGradientsEnabled;
+        if (!processHorizontalGradients) {
+            if (lastHorizontalGradientPixel != null) {
+                for (int y = 0; y < depthHeight; y++) {
+                    Arrays.fill(lastHorizontalGradientPixel[y], false);
+                }
+            }
+        }
+
+        // Single loop to process both too close and horizontal gradient detection
+        for (int y = 0; y < depthHeight; y++) {
+            for (int x = 0; x < depthWidth; x++) {
+                float currentDepth = filteredDepthArray[y][x];
+
+                if (currentDepth <= 0) {
+                    continue;
+                }
+
+                // Check 1: Too close detection
+                if (currentDepth < tooCloseThreshold) {
+                    lastTooClosePixel[y][x] = true;
+                }
+
+                // Check 2: Horizontal gradient detection
+                if (processHorizontalGradients && x < depthWidth - 1) {
+                    float nextDepth = filteredDepthArray[y][x + 1];
+
+                    if (nextDepth > 0) {
+                        float depthDifference = Math.abs(currentDepth - nextDepth);
+
+                        if (depthDifference > depthGradientThreshold) {
+                            for (int dy = -1; dy <= 1; dy++) {
+                                int ny = y + dy;
+                                if (ny >= 0 && ny < depthHeight) {
+                                    for (int dx = -1; dx <= 2; dx++) {
+                                        int nx = x + dx;
+                                        if (nx >= 0 && nx < depthWidth) {
+                                            lastHorizontalGradientPixel[ny][nx] = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Processes vertical gradients in a unified manner using a single loop.
+     * This method combines vertical closer and vertical farther detection
+     * to improve performance by reducing redundant iterations over the depth array.
+     *
+     * @param depthArray The depth array to process
+     * @param width The width of the depth array
+     * @param height The height of the depth array
+     * @param consecutiveThreshold Number of consecutive pixels needed to detect a trend
+     * @param verticalCloserPixels Output array for vertical closer pixels
+     * @param verticalFartherPixels Output array for vertical farther pixels
+     */
+    private void processVerticalGradientsUnified(short[][] depthArray, int width, int height,
+                                               int consecutiveThreshold,
+                                               boolean[][] verticalCloserPixels,
+                                               boolean[][] verticalFartherPixels) {
+
+        // Process depth gradients along vertical scanlines
+        // Use the full width of the image for complete visualization
+        int startCol = 0;
+        int endCol = width;
+
+        // For each column, check for both "closer next" and "farther next" pixels starting from the bottom
+        for (int x = startCol; x < endCol; x++) {
+            // Process from bottom to top (higher y values are at the bottom of the image)
+            int consecutiveCloserCount = 0;
+            int consecutiveFartherCount = 0;
+            int closerStartY = -1;
+            int fartherStartY = -1;
+
+            for (int y = height - 1; y > consecutiveThreshold; y--) {
+                // Get the current depth value (used by both checks)
+                float currentDepth = depthArray[y][x];
+
+                // Skip invalid depth values (0 or negative)
+                if (currentDepth <= 0) {
+                    consecutiveCloserCount = 0;
+                    consecutiveFartherCount = 0;
+                    continue;
+                }
+
+                // Check if the current depth is beyond the maximum safe distance
+                boolean isTooFar = currentDepth > maxSafeDistance;
+                if (isTooFar) {
+                    // Mark the current pixel for both checks
+                    verticalCloserPixels[y][x] = true;
+                    verticalFartherPixels[y][x] = true;
+                    // Stop traversability check for this column
+                    break;
+                }
+
+                // Get the depth value of the pixel above (used by both checks)
+                float nextDepth = depthArray[y - 1][x];
+
+                // Skip if next depth is invalid
+                if (nextDepth <= 0) {
+                    consecutiveCloserCount = 0;
+                    consecutiveFartherCount = 0;
+                    continue;
+                }
+
+                // Calculate depth difference once for both checks
+                float depthDifference = currentDepth - nextDepth;
+
+                // Check 1: Vertical closer (potential drop-off)
+                boolean isVerticalCloser = depthDifference > verticalCloserThreshold;
+                if (isVerticalCloser) {
+                    // If this is the first closer pixel in a sequence, record its position
+                    if (consecutiveCloserCount == 0) {
+                        closerStartY = y;
+                    }
+                    consecutiveCloserCount++;
+
+                    // If we've found enough consecutive closer pixels, mark them all
+                    if (consecutiveCloserCount >= consecutiveThreshold) {
+                        // Mark all pixels in the sequence
+                        for (int i = 0; i < consecutiveCloserCount; i++) {
+                            int pixelY = closerStartY - i;
+                            if (pixelY >= 0) {
+                                verticalCloserPixels[pixelY][x] = true;
+                            }
+                        }
+                        // Stop traversability check for this column
+                        break;
+                    }
+                } else {
+                    // Reset the counter if we don't have a closer pixel
+                    consecutiveCloserCount = 0;
+                }
+
+                // Check 2: Vertical farther (potential step-up)
+                boolean isVerticalFarther = depthDifference < -verticalFartherThreshold;
+                if (isVerticalFarther) {
+                    // If this is the first farther pixel in a sequence, record its position
+                    if (consecutiveFartherCount == 0) {
+                        fartherStartY = y;
+                    }
+                    consecutiveFartherCount++;
+
+                    // If we've found enough consecutive farther pixels, mark them all
+                    if (consecutiveFartherCount >= consecutiveThreshold) {
+                        // Mark all pixels in the sequence
+                        for (int i = 0; i < consecutiveFartherCount; i++) {
+                            int pixelY = fartherStartY - i;
+                            if (pixelY >= 0) {
+                                verticalFartherPixels[pixelY][x] = true;
+                            }
+                        }
+                        // Stop traversability check for this column
+                        break;
+                    }
+                } else {
+                    // Reset the counter if we don't have a farther pixel
+                    consecutiveFartherCount = 0;
+                }
+            }
+        }
+    }
+
+    /**
+     * Gets information about pixels that are too close for safe navigation.
+     * These represent areas that are closer than the safe threshold.
+     *
+     * @return 2D boolean array where true indicates a "too close" pixel, or null if not available
+     */
+    public boolean[][] getTooClosePixelInfo() {
+        // Create a new array to avoid exposing internal data
+        if (depthWidth <= 0 || depthHeight <= 0) {
+            return null;
+        }
+
+        boolean[][] tooCloseInfo = new boolean[depthHeight][depthWidth];
+
+        // If we have too close pixel data, return it
+        if (lastTooClosePixel != null) {
+            for (int y = 0; y < depthHeight; y++) {
+                for (int x = 0; x < depthWidth; x++) {
+                    if (y < lastTooClosePixel.length && x < lastTooClosePixel[y].length) {
+                        tooCloseInfo[y][x] = lastTooClosePixel[y][x];
+                    }
+                }
+            }
+        }
+
+        return tooCloseInfo;
+    }
 
     /**
      * Gets the navigability map for the left window.
@@ -464,28 +670,56 @@ public class DepthProcessor implements ArCoreProcessor {
      * Gets information about pixels where the next depth value is closer than the current one.
      * These represent potential drop-offs or edges that could be hazardous for navigation.
      *
-     * @return 2D boolean array where true indicates a "closer next" pixel, or null if not available
+     * @return 2D boolean array where true indicates a "vertical closer" pixel, or null if not available
      */
-    public boolean[][] getCloserNextPixelInfo() {
+    public boolean[][] getVerticalCloserPixelInfo() {
         // Create a new array to avoid exposing internal data
         if (depthWidth <= 0 || depthHeight <= 0) {
             return null;
         }
 
-        boolean[][] closerNextInfo = new boolean[depthHeight][depthWidth];
+        boolean[][] verticalCloserInfo = new boolean[depthHeight][depthWidth];
 
-        // If we have closer next pixel data, return it
-        if (lastCloserNextPixel != null) {
+        // If we have vertical closer pixel data, return it
+        if (lastVerticalCloserPixel != null) {
             for (int y = 0; y < depthHeight; y++) {
                 for (int x = 0; x < depthWidth; x++) {
-                    if (y < lastCloserNextPixel.length && x < lastCloserNextPixel[y].length) {
-                        closerNextInfo[y][x] = lastCloserNextPixel[y][x];
+                    if (y < lastVerticalCloserPixel.length && x < lastVerticalCloserPixel[y].length) {
+                        verticalCloserInfo[y][x] = lastVerticalCloserPixel[y][x];
                     }
                 }
             }
         }
 
-        return closerNextInfo;
+        return verticalCloserInfo;
+    }
+
+    /**
+     * Gets information about pixels where the next depth value is farther than the current one.
+     * These represent potential step-ups or edges that could be hazardous for navigation.
+     *
+     * @return 2D boolean array where true indicates a "vertical farther" pixel, or null if not available
+     */
+    public boolean[][] getVerticalFartherPixelInfo() {
+        // Create a new array to avoid exposing internal data
+        if (depthWidth <= 0 || depthHeight <= 0) {
+            return null;
+        }
+
+        boolean[][] verticalFartherInfo = new boolean[depthHeight][depthWidth];
+
+        // If we have vertical farther pixel data, return it
+        if (lastVerticalFartherPixel != null) {
+            for (int y = 0; y < depthHeight; y++) {
+                for (int x = 0; x < depthWidth; x++) {
+                    if (y < lastVerticalFartherPixel.length && x < lastVerticalFartherPixel[y].length) {
+                        verticalFartherInfo[y][x] = lastVerticalFartherPixel[y][x];
+                    }
+                }
+            }
+        }
+
+        return verticalFartherInfo;
     }
 
     /**
@@ -523,7 +757,6 @@ public class DepthProcessor implements ArCoreProcessor {
      */
     public void setHorizontalGradientsEnabled(boolean enabled) {
         this.horizontalGradientsEnabled = enabled;
-        Timber.d("Horizontal gradients %s", enabled ? "enabled" : "disabled");
     }
 
     /**
@@ -551,6 +784,14 @@ public class DepthProcessor implements ArCoreProcessor {
      */
     public void setConfidenceThreshold(float threshold) {
         this.confidenceThreshold = threshold;
+    }
+
+    /**
+     * Sets the too close threshold for depth processing.
+     * @param thresholdMm The too close threshold in millimeters
+     */
+    public void setTooCloseThreshold(float thresholdMm) {
+        this.tooCloseThreshold = thresholdMm;
     }
 
     /**
@@ -684,8 +925,10 @@ public class DepthProcessor implements ArCoreProcessor {
                 getConfidenceImageData(),
                 getWidth(),
                 getHeight(),
-                getCloserNextPixelInfo(),
-                getHorizontalGradientInfo()
+                getVerticalCloserPixelInfo(),
+                getVerticalFartherPixelInfo(),
+                getHorizontalGradientInfo(),
+                getTooClosePixelInfo()
             );
         } else {
             // Return basic frame data without depth information
@@ -756,25 +999,25 @@ public class DepthProcessor implements ArCoreProcessor {
     }
 
     /**
-     * Computes "closer next" pixels in a depth array.
+     * Computes "vertical closer" pixels in a depth array.
      * These are pixels where the next depth value (in the upward direction) is closer by more than the threshold,
      * indicating potential drop-offs or edges that could be hazardous for navigation.
-     * Only marks pixels as "closer next" when there's a consistent tendency of pixels getting closer,
+     * Only marks pixels as "vertical closer" when there's a consistent tendency of pixels getting closer,
      * rather than marking individual noisy values.
      *
      * @param depthArray The depth array to process
      * @param width The width of the depth array
      * @param height The height of the depth array
      * @param consecutiveThreshold Number of consecutive pixels needed to detect a trend
-     * @param closerNextThreshold Threshold for considering a pixel as "closer next" in millimeters
+     * @param verticalCloserThreshold Threshold for considering a pixel as "vertical closer" in millimeters
      * @param maxSafeDistance Maximum safe distance in millimeters
-     * @return A boolean array where true indicates a "closer next" pixel
+     * @return A boolean array where true indicates a "vertical closer" pixel
      */
-    private boolean[][] computeCloserNextPixels(short[][] depthArray, int width, int height,
-                                               int consecutiveThreshold, float closerNextThreshold,
-                                               float maxSafeDistance) {
+    private boolean[][] computeVerticalCloserPixels(short[][] depthArray, int width, int height,
+                                                   int consecutiveThreshold, float verticalCloserThreshold,
+                                                   float maxSafeDistance) {
         // Create a boolean array to store the results
-        boolean[][] closerNextPixels = new boolean[height][width];
+        boolean[][] verticalCloserPixels = new boolean[height][width];
 
         // Process depth gradients along vertical scanlines
         // Use the full width of the image for complete visualization
@@ -801,7 +1044,7 @@ public class DepthProcessor implements ArCoreProcessor {
                 boolean isTooFar = currentDepth > maxSafeDistance;
                 if (isTooFar) {
                     // Mark the current pixel
-                    closerNextPixels[y][x] = true;
+                    verticalCloserPixels[y][x] = true;
                     // Stop traversability check for this column
                     break;
                 }
@@ -817,9 +1060,9 @@ public class DepthProcessor implements ArCoreProcessor {
 
                 // Check if pixel above is closer by more than the threshold (potential drop-off)
                 float depthDifference = currentDepth - nextDepth;
-                boolean isCloserNext = depthDifference > closerNextThreshold;
+                boolean isVerticalCloser = depthDifference > verticalCloserThreshold;
 
-                if (isCloserNext) {
+                if (isVerticalCloser) {
                     // If this is the first closer pixel in a sequence, record its position
                     if (consecutiveCloserCount == 0) {
                         startY = y;
@@ -832,7 +1075,7 @@ public class DepthProcessor implements ArCoreProcessor {
                         for (int i = 0; i < consecutiveCloserCount; i++) {
                             int pixelY = startY - i;
                             if (pixelY >= 0) {
-                                closerNextPixels[pixelY][x] = true;
+                                verticalCloserPixels[pixelY][x] = true;
                             }
                         }
                         // Stop traversability check for this column
@@ -845,7 +1088,100 @@ public class DepthProcessor implements ArCoreProcessor {
             }
         }
 
-        return closerNextPixels;
+        return verticalCloserPixels;
+    }
+
+    /**
+     * Computes "vertical farther" pixels in a depth array.
+     * These are pixels where the next depth value (in the upward direction) is farther by more than the threshold,
+     * indicating potential step-ups or edges that could be hazardous for navigation.
+     * Only marks pixels as "vertical farther" when there's a consistent tendency of pixels getting farther,
+     * rather than marking individual noisy values.
+     *
+     * @param depthArray The depth array to process
+     * @param width The width of the depth array
+     * @param height The height of the depth array
+     * @param consecutiveThreshold Number of consecutive pixels needed to detect a trend
+     * @param verticalFartherThreshold Threshold for considering a pixel as "vertical farther" in millimeters
+     * @param maxSafeDistance Maximum safe distance in millimeters
+     * @return A boolean array where true indicates a "vertical farther" pixel
+     */
+    private boolean[][] computeVerticalFartherPixels(short[][] depthArray, int width, int height,
+                                                    int consecutiveThreshold, float verticalFartherThreshold,
+                                                    float maxSafeDistance) {
+        // Create a boolean array to store the results
+        boolean[][] verticalFartherPixels = new boolean[height][width];
+
+        // Process depth gradients along vertical scanlines
+        // Use the full width of the image for complete visualization
+        int startCol = 0;
+        int endCol = width;
+
+        // For each column, check for "vertical farther" pixels (step-ups) starting from the bottom
+        for (int x = startCol; x < endCol; x++) {
+            // Process from bottom to top (higher y values are at the bottom of the image)
+            int consecutiveFartherCount = 0;
+            int startY = -1;
+
+            for (int y = height - 1; y > consecutiveThreshold; y--) {
+                // Get the current depth value
+                float currentDepth = depthArray[y][x];
+
+                // Skip invalid depth values (0 or negative)
+                if (currentDepth <= 0) {
+                    consecutiveFartherCount = 0;
+                    continue;
+                }
+
+                // Check if the current depth is beyond the maximum safe distance
+                boolean isTooFar = currentDepth > maxSafeDistance;
+                if (isTooFar) {
+                    // Mark the current pixel
+                    verticalFartherPixels[y][x] = true;
+                    // Stop traversability check for this column
+                    break;
+                }
+
+                // Get the depth value of the pixel above
+                float nextDepth = depthArray[y - 1][x];
+
+                // Skip if next depth is invalid
+                if (nextDepth <= 0) {
+                    consecutiveFartherCount = 0;
+                    continue;
+                }
+
+                // Check if pixel above is farther by more than the threshold (potential step-up)
+                float depthDifference = nextDepth - currentDepth;
+                boolean isVerticalFarther = depthDifference > verticalFartherThreshold;
+
+                if (isVerticalFarther) {
+                    // If this is the first farther pixel in a sequence, record its position
+                    if (consecutiveFartherCount == 0) {
+                        startY = y;
+                    }
+                    consecutiveFartherCount++;
+
+                    // If we've found enough consecutive farther pixels, mark them all
+                    if (consecutiveFartherCount >= consecutiveThreshold) {
+                        // Mark all pixels in the sequence
+                        for (int i = 0; i < consecutiveFartherCount; i++) {
+                            int pixelY = startY - i;
+                            if (pixelY >= 0) {
+                                verticalFartherPixels[pixelY][x] = true;
+                            }
+                        }
+                        // Stop traversability check for this column
+                        break;
+                    }
+                } else {
+                    // Reset the counter if we don't have a farther pixel
+                    consecutiveFartherCount = 0;
+                }
+            }
+        }
+
+        return verticalFartherPixels;
     }
 
     /**
@@ -893,10 +1229,11 @@ public class DepthProcessor implements ArCoreProcessor {
             // Count obstacles in this row within the specified window
             for (int x = startX; x <= endX; x++) {
                 for (int y = rowTopY; y <= rowBottomY; y++) {
-                    if (y < lastCloserNextPixel.length && x < lastCloserNextPixel[y].length &&
+                    if (y < lastVerticalCloserPixel.length && x < lastVerticalCloserPixel[y].length &&
+                        y < lastVerticalFartherPixel.length && x < lastVerticalFartherPixel[y].length &&
                         y < lastHorizontalGradientPixel.length && x < lastHorizontalGradientPixel[y].length) {
                         totalPixels++;
-                        if (lastCloserNextPixel[y][x] || lastHorizontalGradientPixel[y][x]) {
+                        if (lastVerticalCloserPixel[y][x] || lastVerticalFartherPixel[y][x] || lastHorizontalGradientPixel[y][x]) {
                             obstacleCount++;
                         }
                     }

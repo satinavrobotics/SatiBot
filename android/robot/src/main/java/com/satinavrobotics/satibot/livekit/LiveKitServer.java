@@ -27,6 +27,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.concurrent.Executors;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import io.livekit.android.ConnectOptions;
 import io.livekit.android.LiveKit;
@@ -34,19 +35,22 @@ import io.livekit.android.LiveKitOverrides;
 import io.livekit.android.RoomOptions;
 import io.livekit.android.renderer.SurfaceViewRenderer;
 import io.livekit.android.room.Room;
+import io.livekit.android.events.RoomEvent;
 import io.livekit.android.room.participant.ConnectionQuality;
 import io.livekit.android.room.participant.LocalParticipant;
+import io.livekit.android.room.participant.Participant;
+import io.livekit.android.room.participant.RemoteParticipant;
 import io.livekit.android.room.track.CameraPosition;
 import io.livekit.android.room.track.LocalVideoTrack;
 import io.livekit.android.room.track.LocalVideoTrackOptions;
 import io.livekit.android.room.track.Track;
-import io.livekit.android.room.track.TrackException;
 import io.livekit.android.room.track.TrackPublication;
 import io.livekit.android.room.track.VideoCaptureParameter;
 import kotlin.Result;
 import kotlin.Unit;
 import kotlin.coroutines.Continuation;
 import kotlin.coroutines.CoroutineContext;
+
 import kotlinx.coroutines.Dispatchers;
 import okhttp3.Credentials;
 import okhttp3.MediaType;
@@ -74,6 +78,24 @@ public class LiveKitServer  {
 
     // Permission handling
     private boolean allGranted = false;
+
+    // Connection state listeners
+    private final CopyOnWriteArrayList<ConnectionStateListener> connectionStateListeners = new CopyOnWriteArrayList<>();
+
+    // Lifecycle management
+    private boolean isAppInBackground = false;
+    private boolean wasConnectedBeforeBackground = false;
+
+    // Room state monitoring
+    private volatile boolean isMonitoring = false;
+    private Thread stateMonitorThread;
+
+    /**
+     * Interface for listening to connection state changes
+     */
+    public interface ConnectionStateListener {
+        void onConnectionStateChanged(boolean connected, Room.State roomState);
+    }
 
 
     // Singleton pattern for LiveKitServer
@@ -105,6 +127,199 @@ public class LiveKitServer  {
 
         room = LiveKit.INSTANCE.create(context, createRoomOptions(), createOverrides());
         statusManager = StatusManager.getInstance();
+
+        // Set up room event listener for connection state monitoring
+        setupRoomListener();
+    }
+
+    /**
+     * Sets up room state monitoring to detect connection state changes
+     */
+    private void setupRoomListener() {
+        // Stop any existing monitoring
+        stopStateMonitoring();
+
+        // Start monitoring room state changes
+        startStateMonitoring();
+    }
+
+    /**
+     * Starts monitoring room state changes in a background thread
+     */
+    private void startStateMonitoring() {
+        isMonitoring = true;
+        stateMonitorThread = new Thread(() -> {
+            Room.State lastKnownState = null;
+            boolean isFirstCheck = true;
+
+            while (isMonitoring && !Thread.currentThread().isInterrupted()) {
+                try {
+                    if (room != null) {
+                        Room.State currentState = room.getState();
+
+                        // Check if state has changed OR if this is the first check
+                        if (lastKnownState != currentState || isFirstCheck) {
+                            isFirstCheck = false;
+
+                            // Update connection state based on room state
+                            switch (currentState) {
+                                case CONNECTED:
+                                    updateConnectionState(true);
+                                    break;
+                                case DISCONNECTED:
+                                    updateConnectionState(false);
+                                    break;
+                                case RECONNECTING:
+                                    // Don't change connected state during reconnection
+                                    break;
+                                default:
+                                    // Handle other states if needed
+                                    break;
+                            }
+
+                            lastKnownState = currentState;
+                        }
+                    }
+
+                    // Sleep for a short interval before checking again
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Timber.d("State monitoring thread interrupted");
+                    break;
+                } catch (Exception e) {
+                    Timber.w(e, "Error in state monitoring thread");
+                    // Continue monitoring despite errors
+                }
+            }
+
+            Timber.d("State monitoring thread stopped");
+        });
+
+        stateMonitorThread.setName("LiveKit-StateMonitor");
+        stateMonitorThread.setDaemon(true);
+        stateMonitorThread.start();
+        Timber.d("Started room state monitoring");
+    }
+
+    /**
+     * Stops room state monitoring
+     */
+    private void stopStateMonitoring() {
+        isMonitoring = false;
+        if (stateMonitorThread != null) {
+            stateMonitorThread.interrupt();
+            try {
+                stateMonitorThread.join(2000); // Wait up to 2 seconds for thread to stop
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            stateMonitorThread = null;
+            Timber.d("Stopped room state monitoring");
+        }
+    }
+
+    /**
+     * Updates the internal connection state and notifies listeners
+     */
+    private void updateConnectionState(boolean newConnected) {
+        boolean stateChanged = this.connected != newConnected;
+        this.connected = newConnected;
+
+        Room.State roomState = room != null ? room.getState() : Room.State.DISCONNECTED;
+
+        if (stateChanged || connectionStateListeners.size() > 0) {
+            // Notify all listeners on the main thread (even if state didn't change, for force updates)
+            new Handler(Looper.getMainLooper()).post(() -> {
+                for (ConnectionStateListener listener : connectionStateListeners) {
+                    try {
+                        listener.onConnectionStateChanged(newConnected, roomState);
+                    } catch (Exception e) {
+                        Timber.w(e, "Error notifying connection state listener");
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Adds a connection state listener
+     */
+    public void addConnectionStateListener(ConnectionStateListener listener) {
+        if (listener != null && !connectionStateListeners.contains(listener)) {
+            connectionStateListeners.add(listener);
+        }
+    }
+
+    /**
+     * Removes a connection state listener
+     */
+    public void removeConnectionStateListener(ConnectionStateListener listener) {
+        connectionStateListeners.remove(listener);
+    }
+
+    /**
+     * Forces an immediate check of the current connection state and updates UI
+     */
+    public void forceConnectionStateUpdate() {
+        if (room != null) {
+            Room.State currentState = room.getState();
+            boolean isConnected = (currentState == Room.State.CONNECTED);
+            updateConnectionState(isConnected);
+        }
+    }
+
+    /**
+     * Handles app going to background
+     */
+    public void onAppPaused() {
+        isAppInBackground = true;
+        wasConnectedBeforeBackground = isRoomConnected();
+        Timber.d("App paused - was connected: %s", wasConnectedBeforeBackground);
+    }
+
+    /**
+     * Handles app coming back to foreground
+     */
+    public void onAppResumed() {
+        isAppInBackground = false;
+        Timber.d("App resumed - was connected before background: %s, currently connected: %s",
+                wasConnectedBeforeBackground, isRoomConnected());
+
+        // Attempt reconnection if we were connected before going to background
+        if (wasConnectedBeforeBackground && !isRoomConnected()) {
+            Timber.d("Attempting automatic reconnection after app resume");
+            attemptReconnection();
+        }
+    }
+
+    /**
+     * Attempts to reconnect with exponential backoff
+     */
+    private void attemptReconnection() {
+        // Check prerequisites
+        if (!PermissionUtils.hasControllerPermissions((android.app.Activity) context) ||
+            !ConnectionUtils.isInternetAvailable(context)) {
+            Timber.w("Cannot attempt reconnection - missing permissions or internet");
+            return;
+        }
+
+        // Use a background thread for reconnection
+        new Thread(() -> {
+            try {
+                // Check if token needs refresh
+                if (tokenManager.getToken() == null || tokenManager.isTokenExpired()) {
+                    Timber.d("Token expired or missing, refreshing...");
+                    pollForTokenAsync();
+                    // Wait a bit for token refresh
+                    Thread.sleep(2000);
+                }
+
+                // Attempt connection
+                connect();
+            } catch (Exception e) {
+                Timber.e(e, "Error during automatic reconnection");
+            }
+        }).start();
     }
 
     public void pollForTokenAsync() {
@@ -841,6 +1056,9 @@ public class LiveKitServer  {
                 // Reset internal state
                 setConnected(false);
 
+                // Clean up state monitoring
+                stopStateMonitoring();
+
                 // Reset all camera-related singletons to prevent multiple camera sources
                 resetCameraSingletons();
 
@@ -849,10 +1067,13 @@ public class LiveKitServer  {
             } catch (Exception e) {
                 Timber.e(e, "Error during disconnect process");
                 setConnected(false);
+                stopStateMonitoring();
                 resetCameraSingletons();
             }
         }).start();
     }
+
+
 
     /**
      * Resets camera singletons to prevent multiple camera sources
@@ -872,7 +1093,7 @@ public class LiveKitServer  {
     }
 
     public void setConnected(boolean connected) {
-        this.connected = connected;
+        updateConnectionState(connected);
     }
 
     /**
@@ -1028,6 +1249,7 @@ public class LiveKitServer  {
         if (instance != null) {
             try {
                 instance.disconnect();
+                instance.stopStateMonitoring();
                 Thread.sleep(3000); // Wait longer for complete cleanup
             } catch (Exception ignored) {}
             instance = null;

@@ -4,9 +4,14 @@ uniform sampler2D u_DepthTexture;
 uniform sampler2D u_ConfidenceTexture;
 uniform sampler2D u_GradientTexture;
 uniform sampler2D u_CloserNextTexture;
+uniform sampler2D u_VerticalFartherTexture;
 uniform sampler2D u_HorizontalGradientTexture;
+uniform sampler2D u_TooCloseTexture;
 uniform int u_DepthColorMode;
 uniform float u_ConfidenceThreshold;
+uniform int u_ShowVerticalCloser;
+uniform int u_ShowVerticalFarther;
+uniform int u_ShowTooClose;
 
 varying vec2 v_TexCoord;
 
@@ -64,9 +69,17 @@ void main() {
     vec4 closerNextSample = texture2D(u_CloserNextTexture, flippedCoords);
     float isCloserNext = closerNextSample.r;
 
+    // Read vertical farther value from B channel
+    vec4 verticalFartherSample = texture2D(u_VerticalFartherTexture, flippedCoords);
+    float isVerticalFarther = verticalFartherSample.b;
+
     // Read horizontal gradient value from R channel
     vec4 horizontalGradientSample = texture2D(u_HorizontalGradientTexture, flippedCoords);
     float isHorizontalGradient = horizontalGradientSample.r;
+
+    // Read too close value from R channel (orange color)
+    vec4 tooCloseSample = texture2D(u_TooCloseTexture, flippedCoords);
+    float isTooClose = tooCloseSample.r;
 
     // Apply confidence threshold
     if (normalizedConfidence < u_ConfidenceThreshold) {
@@ -93,14 +106,24 @@ void main() {
         color = mix(color, vec3(1.0, 0.0, 1.0), 0.7);
     }
 
-    // Highlight "closer next" pixels in cyan (potential drop-offs)
-    if (isCloserNext > 0.5) {
-        color = mix(color, vec3(0.0, 1.0, 1.0), 0.7);
+    // Highlight "vertical closer" pixels in red (potential drop-offs) - only if enabled
+    if (u_ShowVerticalCloser == 1 && isCloserNext > 0.5) {
+        color = mix(color, vec3(1.0, 0.0, 0.0), 0.7); // Red overlay
     }
 
-    // Highlight horizontal gradient pixels in bright purple with higher priority
+    // Highlight "vertical farther" pixels in blue (potential step-ups) - only if enabled
+    if (u_ShowVerticalFarther == 1 && isVerticalFarther > 0.5) {
+        color = mix(color, vec3(0.0, 0.0, 1.0), 0.7); // Blue overlay
+    }
+
+    // Highlight horizontal gradient pixels in green
     if (isHorizontalGradient > 0.5) {
-        color = mix(color, vec3(0.8, 0.0, 1.0), 0.9); // Brighter purple with higher mix factor
+        color = mix(color, vec3(0.0, 1.0, 0.0), 0.7); // Green overlay
+    }
+
+    // Highlight "too close" pixels in orange (safety concern) - HIGHEST PRIORITY
+    if (u_ShowTooClose == 1 && isTooClose > 0.5) {
+        color = mix(color, vec3(1.0, 0.65, 0.0), 0.8); // Orange overlay with higher opacity
     }
 
     gl_FragColor = vec4(color, 1.0);

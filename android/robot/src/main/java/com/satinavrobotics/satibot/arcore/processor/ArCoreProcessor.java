@@ -42,7 +42,9 @@ public interface ArCoreProcessor {
         private int depthWidth;
         private int depthHeight;
         private boolean[][] closerNextPixelInfo;
+        private boolean[][] verticalFartherPixelInfo;
         private boolean[][] horizontalGradientInfo;
+        private boolean[][] tooClosePixelInfo;
 
         public ProcessedFrameData(Frame frame, TrackingState trackingState, float[] viewMatrix,
                                  float[] projectionMatrix, Pose currentPose,
@@ -60,7 +62,9 @@ public interface ArCoreProcessor {
             this.depthWidth = 0;
             this.depthHeight = 0;
             this.closerNextPixelInfo = null;
+            this.verticalFartherPixelInfo = null;
             this.horizontalGradientInfo = null;
+            this.tooClosePixelInfo = null;
         }
 
         public ProcessedFrameData(Frame frame, TrackingState trackingState, float[] viewMatrix,
@@ -68,7 +72,8 @@ public interface ArCoreProcessor {
                                  List<MapResolvingManager.ResolvedAnchor> resolvedAnchors,
                                  ByteBuffer depthImageData, ByteBuffer confidenceImageData,
                                  int depthWidth, int depthHeight,
-                                 boolean[][] closerNextPixelInfo, boolean[][] horizontalGradientInfo) {
+                                 boolean[][] closerNextPixelInfo, boolean[][] verticalFartherPixelInfo,
+                                 boolean[][] horizontalGradientInfo, boolean[][] tooClosePixelInfo) {
             this.frame = frame;
             this.trackingState = trackingState;
             this.viewMatrix = viewMatrix;
@@ -82,7 +87,9 @@ public interface ArCoreProcessor {
             this.depthWidth = depthWidth;
             this.depthHeight = depthHeight;
             this.closerNextPixelInfo = closerNextPixelInfo;
+            this.verticalFartherPixelInfo = verticalFartherPixelInfo;
             this.horizontalGradientInfo = horizontalGradientInfo;
+            this.tooClosePixelInfo = tooClosePixelInfo;
         }
 
         public Frame getFrame() {
@@ -130,8 +137,16 @@ public interface ArCoreProcessor {
             return closerNextPixelInfo;
         }
 
+        public boolean[][] getVerticalFartherPixelInfo() {
+            return verticalFartherPixelInfo;
+        }
+
         public boolean[][] getHorizontalGradientInfo() {
             return horizontalGradientInfo;
+        }
+
+        public boolean[][] getTooClosePixelInfo() {
+            return tooClosePixelInfo;
         }
 
         public boolean hasDepthData() {

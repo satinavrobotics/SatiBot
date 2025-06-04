@@ -53,9 +53,14 @@ public class DepthMapRenderer implements ARCoreRenderer {
     private int gradientConfidenceTextureParam;
     private int gradientTextureParam;
     private int closerNextTextureParam;
+    private int verticalFartherTextureParam;
     private int horizontalGradientTextureParam;
+    private int tooCloseTextureParam;
     private int gradientDepthColorModeParam;
     private int gradientConfidenceThresholdParam;
+    private int showVerticalCloserParam;
+    private int showVerticalFartherParam;
+    private int showTooCloseParam;
 
     // Buffers for vertex data for the quad.
     private final FloatBuffer quadVertices;
@@ -68,14 +73,18 @@ public class DepthMapRenderer implements ARCoreRenderer {
     private int confidenceTextureId;
     private int gradientTextureId;
     private int closerNextTextureId;
+    private int verticalFartherTextureId;
     private int horizontalGradientTextureId;
+    private int tooCloseTextureId;
 
     // Reusable buffers for texture data
     private ByteBuffer depthByteBuffer;
     private ByteBuffer confidenceRGBABuffer;
     private ByteBuffer gradientRGBABuffer;
     private ByteBuffer closerNextRGBABuffer;
+    private ByteBuffer verticalFartherRGBABuffer;
     private ByteBuffer horizontalGradientRGBABuffer;
+    private ByteBuffer tooCloseRGBABuffer;
 
     private long averageRenderTimeMs = 0;
     private static final float RENDER_TIME_ALPHA = 0.3f; // For exponential moving average
@@ -91,6 +100,11 @@ public class DepthMapRenderer implements ARCoreRenderer {
     // Visualization mode (0 = rainbow, 1 = grayscale)
     private int depthColorMode = 0;
     private float confidenceThreshold = 0.0f;
+
+    // Visualization control flags
+    private boolean showVerticalCloser = true;
+    private boolean showVerticalFarther = true;
+    private boolean showTooClose = true;
 
     // Surface dimensions
     private int width = 0;
@@ -190,7 +204,8 @@ public class DepthMapRenderer implements ARCoreRenderer {
             // Draw with the updated depth data and gradient information
             draw(frameData.getDepthImageData(), frameData.getConfidenceImageData(),
                  frameData.getDepthWidth(), frameData.getDepthHeight(),
-                 frameData.getCloserNextPixelInfo(), frameData.getHorizontalGradientInfo());
+                 frameData.getCloserNextPixelInfo(), frameData.getVerticalFartherPixelInfo(),
+                 frameData.getHorizontalGradientInfo(), frameData.getTooClosePixelInfo());
         } else {
             // No depth data available, just draw with existing textures
             draw();
@@ -246,7 +261,7 @@ public class DepthMapRenderer implements ARCoreRenderer {
     public void cleanup() {
         // Clean up textures and buffers
         int[] textures = new int[] { depthTextureId, confidenceTextureId, gradientTextureId,
-                                    closerNextTextureId, horizontalGradientTextureId };
+                                    closerNextTextureId, verticalFartherTextureId, horizontalGradientTextureId, tooCloseTextureId };
         GLES20.glDeleteTextures(textures.length, textures, 0);
 
         int[] buffers = new int[] { quadVerticesBufferId, quadTexCoordsBufferId };
@@ -327,18 +342,25 @@ public class DepthMapRenderer implements ARCoreRenderer {
         gradientConfidenceTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_ConfidenceTexture");
         gradientTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_GradientTexture");
         closerNextTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_CloserNextTexture");
+        verticalFartherTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_VerticalFartherTexture");
         horizontalGradientTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_HorizontalGradientTexture");
+        tooCloseTextureParam = GLES20.glGetUniformLocation(gradientProgram, "u_TooCloseTexture");
         gradientDepthColorModeParam = GLES20.glGetUniformLocation(gradientProgram, "u_DepthColorMode");
         gradientConfidenceThresholdParam = GLES20.glGetUniformLocation(gradientProgram, "u_ConfidenceThreshold");
+        showVerticalCloserParam = GLES20.glGetUniformLocation(gradientProgram, "u_ShowVerticalCloser");
+        showVerticalFartherParam = GLES20.glGetUniformLocation(gradientProgram, "u_ShowVerticalFarther");
+        showTooCloseParam = GLES20.glGetUniformLocation(gradientProgram, "u_ShowTooClose");
 
         // Generate the textures.
-        int[] textures = new int[5];
-        GLES20.glGenTextures(5, textures, 0);
+        int[] textures = new int[7];
+        GLES20.glGenTextures(7, textures, 0);
         depthTextureId = textures[0];
         confidenceTextureId = textures[1];
         gradientTextureId = textures[2];
         closerNextTextureId = textures[3];
-        horizontalGradientTextureId = textures[4];
+        verticalFartherTextureId = textures[4];
+        horizontalGradientTextureId = textures[5];
+        tooCloseTextureId = textures[6];
 
         // Create buffers for the quad vertices and texture coordinates.
         int[] buffers = new int[2];
@@ -370,7 +392,7 @@ public class DepthMapRenderer implements ARCoreRenderer {
      * This method uses existing textures without updating them.
      */
     public void draw() {
-        draw(null, null, 0, 0, null, null);
+        draw(null, null, 0, 0, null, null, null, null);
     }
 
     /**
@@ -381,15 +403,17 @@ public class DepthMapRenderer implements ARCoreRenderer {
      * @param width The width of the depth image
      * @param height The height of the depth image
      * @param closerNextInfo The closer next pixel information, or null if not available
+     * @param verticalFartherInfo The vertical farther pixel information, or null if not available
      * @param horizontalGradientInfo The horizontal gradient information, or null if not available
+     * @param tooCloseInfo The too close pixel information, or null if not available
      */
     public void draw(ByteBuffer depthBuffer, ByteBuffer confidenceBuffer, int width, int height,
-                    boolean[][] closerNextInfo, boolean[][] horizontalGradientInfo) {
+                    boolean[][] closerNextInfo, boolean[][] verticalFartherInfo, boolean[][] horizontalGradientInfo, boolean[][] tooCloseInfo) {
         long startTime = System.currentTimeMillis();
 
         // Process depth data if provided
         if (depthBuffer != null && confidenceBuffer != null && width > 0 && height > 0) {
-            processDepthData(depthBuffer, confidenceBuffer, width, height, closerNextInfo, horizontalGradientInfo);
+            processDepthData(depthBuffer, confidenceBuffer, width, height, closerNextInfo, verticalFartherInfo, horizontalGradientInfo, tooCloseInfo);
         }
 
         // No need to test or write depth, the screen quad has arbitrary depth
@@ -404,13 +428,7 @@ public class DepthMapRenderer implements ARCoreRenderer {
         GLES20.glEnableVertexAttribArray(gradientPositionParam);
         GLES20.glEnableVertexAttribArray(gradientTexCoordParam);
 
-        // Draw the appropriate visualization based on display mode
-        try {
-            // Always draw the depth map - the navigation overlay is handled separately
-            drawDepthMap();
-        } catch (Exception e) {
-            Timber.e(e, "Error during rendering: %s", e.getMessage());
-        }
+        drawDepthMap();
 
         // Disable vertex arrays
         GLES20.glDisableVertexAttribArray(gradientPositionParam);
@@ -467,20 +485,33 @@ public class DepthMapRenderer implements ARCoreRenderer {
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, closerNextTextureId);
         GLES20.glUniform1i(closerNextTextureParam, 3);
 
-        // Set the horizontal gradient texture.
+        // Set the vertical farther texture.
         GLES20.glActiveTexture(GLES20.GL_TEXTURE4);
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, horizontalGradientTextureId);
-        GLES20.glUniform1i(horizontalGradientTextureParam, 4);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, verticalFartherTextureId);
+        GLES20.glUniform1i(verticalFartherTextureParam, 4);
 
-        // Log texture binding for debugging
-        Timber.d("Bound horizontal gradient texture: id=%d, param=%d",
-                horizontalGradientTextureId, horizontalGradientTextureParam);
+        // Set the horizontal gradient texture.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE5);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, horizontalGradientTextureId);
+        GLES20.glUniform1i(horizontalGradientTextureParam, 5);
+
+        // Set the too close texture.
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE6);
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, tooCloseTextureId);
+        GLES20.glUniform1i(tooCloseTextureParam, 6);
+
+
 
         // Set the depth color mode.
         GLES20.glUniform1i(gradientDepthColorModeParam, depthColorMode);
 
         // Set the confidence threshold.
         GLES20.glUniform1f(gradientConfidenceThresholdParam, confidenceThreshold);
+
+        // Set the visualization flags.
+        GLES20.glUniform1i(showVerticalCloserParam, showVerticalCloser ? 1 : 0);
+        GLES20.glUniform1i(showVerticalFartherParam, showVerticalFarther ? 1 : 0);
+        GLES20.glUniform1i(showTooCloseParam, showTooClose ? 1 : 0);
 
         // Draw the quad with a single draw call
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4);
@@ -515,6 +546,30 @@ public class DepthMapRenderer implements ARCoreRenderer {
     }
 
     /**
+     * Sets whether to show vertical closer pixels.
+     * @param show true to show, false to hide
+     */
+    public void setShowVerticalCloser(boolean show) {
+        this.showVerticalCloser = show;
+    }
+
+    /**
+     * Sets whether to show vertical farther pixels.
+     * @param show true to show, false to hide
+     */
+    public void setShowVerticalFarther(boolean show) {
+        this.showVerticalFarther = show;
+    }
+
+    /**
+     * Sets whether to show too close pixels.
+     * @param show true to show, false to hide
+     */
+    public void setShowTooClose(boolean show) {
+        this.showTooClose = show;
+    }
+
+    /**
      * Process depth data and update textures.
      *
      * @param depthBuffer The depth image data buffer
@@ -522,10 +577,11 @@ public class DepthMapRenderer implements ARCoreRenderer {
      * @param width The width of the depth image
      * @param height The height of the depth image
      * @param closerNextInfo The closer next pixel information, or null if not available
+     * @param verticalFartherInfo The vertical farther pixel information, or null if not available
      * @param horizontalGradientInfo The horizontal gradient information, or null if not available
      */
     private void processDepthData(ByteBuffer depthBuffer, ByteBuffer confidenceBuffer, int width, int height,
-                                 boolean[][] closerNextInfo, boolean[][] horizontalGradientInfo) {
+                                 boolean[][] closerNextInfo, boolean[][] verticalFartherInfo, boolean[][] horizontalGradientInfo, boolean[][] tooCloseInfo) {
 
         try {
             // Reuse buffers for better performance - only allocate when needed
@@ -601,7 +657,6 @@ public class DepthMapRenderer implements ARCoreRenderer {
                 depthByteBuffer.rewind();
                 confidenceRGBABuffer.rewind();
             } catch (Exception e) {
-                Timber.e(e, "Error processing depth/confidence buffers: %s", e.getMessage());
                 return;
             }
 
@@ -617,9 +672,7 @@ public class DepthMapRenderer implements ARCoreRenderer {
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
 
-            // Check if the buffer is valid
             if (depthByteBuffer != null && depthByteBuffer.capacity() >= width * height * 4) {
-                // Upload texture data
                 GLES20.glTexImage2D(
                         GLES20.GL_TEXTURE_2D,
                         0,
@@ -630,9 +683,6 @@ public class DepthMapRenderer implements ARCoreRenderer {
                         GLES20.GL_RGBA,
                         GLES20.GL_UNSIGNED_BYTE,
                         depthByteBuffer);
-            } else {
-                Timber.e("Invalid depth buffer for texture upload: capacity=%d, required=%d",
-                        depthByteBuffer != null ? depthByteBuffer.capacity() : 0, width * height * 4);
             }
 
             // Bind the confidence texture
@@ -662,183 +712,211 @@ public class DepthMapRenderer implements ARCoreRenderer {
                         confidenceRGBABuffer != null ? confidenceRGBABuffer.capacity() : 0, width * height * 4);
             }
 
-            // Log the horizontal gradient info for debugging
-            if (horizontalGradientInfo != null) {
-                int count = 0;
-                for (int y = 0; y < height && y < horizontalGradientInfo.length; y++) {
-                    for (int x = 0; x < width && x < horizontalGradientInfo[y].length; x++) {
-                        if (horizontalGradientInfo[y][x]) {
-                            count++;
-                        }
-                    }
-                }
-                Timber.d("Horizontal gradient pixels: %d", count);
-            } else {
-                Timber.w("Horizontal gradient info is null");
-            }
+            processVisualizationTexturesUnified(width, height, internalFormat,
+                    closerNextInfo, verticalFartherInfo, horizontalGradientInfo, tooCloseInfo);
 
-            // Process gradient texture (always process even if null, to clear previous data)
-            {
-                // Create or reuse gradient buffer
-                if (gradientRGBABuffer == null || gradientRGBABuffer.capacity() < width * height * 4) {
-                    gradientRGBABuffer = ByteBuffer.allocateDirect(width * height * 4)
-                            .order(ByteOrder.nativeOrder());
-                } else {
-                    gradientRGBABuffer.clear();
-                }
 
-                // Fill gradient buffer with zeros (no gradients)
-                for (int i = 0; i < width * height * 4; i += 4) {
-                    gradientRGBABuffer.put((byte)0);  // R channel
-                    gradientRGBABuffer.put((byte)0);  // G channel
-                    gradientRGBABuffer.put((byte)0);  // B channel
-                    gradientRGBABuffer.put((byte)255); // Alpha channel
-                }
 
-                gradientRGBABuffer.rewind();
 
-                // Bind the gradient texture
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, gradientTextureId);
-
-                // Use nearest filtering
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-
-                // Upload texture data
-                GLES20.glTexImage2D(
-                        GLES20.GL_TEXTURE_2D,
-                        0,
-                        internalFormat,
-                        width,
-                        height,
-                        0,
-                        GLES20.GL_RGBA,
-                        GLES20.GL_UNSIGNED_BYTE,
-                        gradientRGBABuffer);
-            }
-
-            // Process closer next texture (always process even if null)
-            {
-                // Create or reuse closer next buffer
-                if (closerNextRGBABuffer == null || closerNextRGBABuffer.capacity() < width * height * 4) {
-                    closerNextRGBABuffer = ByteBuffer.allocateDirect(width * height * 4)
-                            .order(ByteOrder.nativeOrder());
-                } else {
-                    closerNextRGBABuffer.clear();
-                }
-
-                // First clear the buffer
-                closerNextRGBABuffer.clear();
-
-                // Fill with zeros initially (no closer next pixels)
-                for (int i = 0; i < width * height * 4; i++) {
-                    closerNextRGBABuffer.put((byte)0);
-                }
-                closerNextRGBABuffer.rewind();
-
-                // If we have valid closer next info, fill in the red pixels
-                if (closerNextInfo != null) {
-                    for (int y = 0; y < height && y < closerNextInfo.length; y++) {
-                        for (int x = 0; x < width && x < closerNextInfo[y].length; x++) {
-                            if (closerNextInfo[y][x]) {
-                                // Calculate buffer position for this pixel
-                                int pos = (y * width + x) * 4;
-                                // Set R channel to 255 for closer next pixels
-                                closerNextRGBABuffer.put(pos, (byte)255);
-                            }
-                        }
-                    }
-                }
-
-                closerNextRGBABuffer.rewind();
-
-                // Bind the closer next texture
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, closerNextTextureId);
-
-                // Use nearest filtering
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-
-                // Upload texture data
-                GLES20.glTexImage2D(
-                        GLES20.GL_TEXTURE_2D,
-                        0,
-                        internalFormat,
-                        width,
-                        height,
-                        0,
-                        GLES20.GL_RGBA,
-                        GLES20.GL_UNSIGNED_BYTE,
-                        closerNextRGBABuffer);
-            }
-
-            // Process horizontal gradient texture (always process even if null)
-            {
-                // Create or reuse horizontal gradient buffer
-                if (horizontalGradientRGBABuffer == null || horizontalGradientRGBABuffer.capacity() < width * height * 4) {
-                    horizontalGradientRGBABuffer = ByteBuffer.allocateDirect(width * height * 4)
-                            .order(ByteOrder.nativeOrder());
-                } else {
-                    horizontalGradientRGBABuffer.clear();
-                }
-
-                // First clear the buffer
-                horizontalGradientRGBABuffer.clear();
-
-                // Fill with zeros initially (no horizontal gradient pixels)
-                for (int i = 0; i < width * height * 4; i++) {
-                    horizontalGradientRGBABuffer.put((byte)0);
-                }
-                horizontalGradientRGBABuffer.rewind();
-
-                // If we have valid horizontal gradient info, fill in the red pixels
-                if (horizontalGradientInfo != null) {
-                    int count = 0;
-                    for (int y = 0; y < height && y < horizontalGradientInfo.length; y++) {
-                        for (int x = 0; x < width && x < horizontalGradientInfo[y].length; x++) {
-                            if (horizontalGradientInfo[y][x]) {
-                                // Calculate buffer position for this pixel
-                                int pos = (y * width + x) * 4;
-                                // Set R channel to 255 for horizontal gradient pixels
-                                horizontalGradientRGBABuffer.put(pos, (byte)255);
-                                count++;
-                            }
-                        }
-                    }
-                    Timber.d("Marked %d horizontal gradient pixels in texture", count);
-                }
-
-                horizontalGradientRGBABuffer.rewind();
-
-                // Bind the horizontal gradient texture
-                GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, horizontalGradientTextureId);
-
-                // Use nearest filtering
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE);
-                GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
-
-                // Upload texture data
-                GLES20.glTexImage2D(
-                        GLES20.GL_TEXTURE_2D,
-                        0,
-                        internalFormat,
-                        width,
-                        height,
-                        0,
-                        GLES20.GL_RGBA,
-                        GLES20.GL_UNSIGNED_BYTE,
-                        horizontalGradientRGBABuffer);
-            }
 
             ShaderUtil.checkGLError(TAG, "After updating textures");
         } catch (Exception e) {
-            Timber.e(e, "Error processing depth data: %s", e.getMessage());
+            // Silently handle errors to avoid log spam
         }
+    }
+
+    /**
+     * Processes all visualization textures in a unified manner for maximum performance.
+     * This method combines all texture processing into a single loop to minimize redundant operations.
+     *
+     * @param width Image width
+     * @param height Image height
+     * @param internalFormat OpenGL internal format for textures
+     * @param closerNextInfo Vertical closer pixel information
+     * @param verticalFartherInfo Vertical farther pixel information
+     * @param horizontalGradientInfo Horizontal gradient pixel information
+     * @param tooCloseInfo Too close pixel information
+     */
+    private void processVisualizationTexturesUnified(int width, int height, int internalFormat,
+                                                   boolean[][] closerNextInfo, boolean[][] verticalFartherInfo,
+                                                   boolean[][] horizontalGradientInfo, boolean[][] tooCloseInfo) {
+
+        int pixelCount = width * height;
+        int bufferSize = pixelCount * 4; // 4 bytes per pixel (RGBA)
+
+        // Ensure all buffers are allocated and sized correctly
+        ensureBufferCapacity(bufferSize);
+
+        // Clear all buffers efficiently using bulk operations
+        clearAllBuffersUnified(bufferSize);
+
+        // Process all visualization data in a single unified loop
+        processVisualizationDataUnified(width, height, closerNextInfo, verticalFartherInfo,
+                                      horizontalGradientInfo, tooCloseInfo);
+
+        // Upload all textures with optimized parameters
+        uploadAllTexturesUnified(width, height, internalFormat);
+    }
+
+    /**
+     * Ensures all visualization buffers have sufficient capacity.
+     */
+    private void ensureBufferCapacity(int requiredSize) {
+        // Gradient buffer (unused but kept for compatibility)
+        if (gradientRGBABuffer == null || gradientRGBABuffer.capacity() < requiredSize) {
+            gradientRGBABuffer = ByteBuffer.allocateDirect(requiredSize).order(ByteOrder.nativeOrder());
+        }
+
+        // Closer next buffer
+        if (closerNextRGBABuffer == null || closerNextRGBABuffer.capacity() < requiredSize) {
+            closerNextRGBABuffer = ByteBuffer.allocateDirect(requiredSize).order(ByteOrder.nativeOrder());
+        }
+
+        // Vertical farther buffer
+        if (verticalFartherRGBABuffer == null || verticalFartherRGBABuffer.capacity() < requiredSize) {
+            verticalFartherRGBABuffer = ByteBuffer.allocateDirect(requiredSize).order(ByteOrder.nativeOrder());
+        }
+
+        // Horizontal gradient buffer
+        if (horizontalGradientRGBABuffer == null || horizontalGradientRGBABuffer.capacity() < requiredSize) {
+            horizontalGradientRGBABuffer = ByteBuffer.allocateDirect(requiredSize).order(ByteOrder.nativeOrder());
+        }
+
+        // Too close buffer
+        if (tooCloseRGBABuffer == null || tooCloseRGBABuffer.capacity() < requiredSize) {
+            tooCloseRGBABuffer = ByteBuffer.allocateDirect(requiredSize).order(ByteOrder.nativeOrder());
+        }
+    }
+
+    /**
+     * Clears all visualization buffers efficiently using bulk operations.
+     */
+    private void clearAllBuffersUnified(int bufferSize) {
+        // Create a reusable zero array for efficient clearing
+        byte[] zeroArray = new byte[bufferSize];
+        // Alpha channel should be 255 for proper blending
+        for (int i = 3; i < bufferSize; i += 4) {
+            zeroArray[i] = (byte) 255;
+        }
+
+        // Clear all buffers efficiently
+        gradientRGBABuffer.clear();
+        gradientRGBABuffer.put(zeroArray);
+        gradientRGBABuffer.rewind();
+
+        closerNextRGBABuffer.clear();
+        closerNextRGBABuffer.put(zeroArray);
+        closerNextRGBABuffer.rewind();
+
+        verticalFartherRGBABuffer.clear();
+        verticalFartherRGBABuffer.put(zeroArray);
+        verticalFartherRGBABuffer.rewind();
+
+        horizontalGradientRGBABuffer.clear();
+        horizontalGradientRGBABuffer.put(zeroArray);
+        horizontalGradientRGBABuffer.rewind();
+
+        tooCloseRGBABuffer.clear();
+        tooCloseRGBABuffer.put(zeroArray);
+        tooCloseRGBABuffer.rewind();
+    }
+
+    /**
+     * Processes all visualization data in a single unified loop for maximum performance.
+     * This eliminates redundant iterations over the same pixel data.
+     */
+    private void processVisualizationDataUnified(int width, int height,
+                                               boolean[][] closerNextInfo, boolean[][] verticalFartherInfo,
+                                               boolean[][] horizontalGradientInfo, boolean[][] tooCloseInfo) {
+
+        // Single loop through all pixels - maximum efficiency
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int pos = (y * width + x) * 4;
+
+                // Process closer next pixels
+                if (closerNextInfo != null && y < closerNextInfo.length && x < closerNextInfo[y].length && closerNextInfo[y][x]) {
+                    closerNextRGBABuffer.put(pos, (byte) 255);
+                }
+
+                // Process vertical farther pixels
+                if (verticalFartherInfo != null && y < verticalFartherInfo.length && x < verticalFartherInfo[y].length && verticalFartherInfo[y][x]) {
+                    verticalFartherRGBABuffer.put(pos + 2, (byte) 255);
+                }
+
+                // Process horizontal gradient pixels
+                if (horizontalGradientInfo != null && y < horizontalGradientInfo.length && x < horizontalGradientInfo[y].length && horizontalGradientInfo[y][x]) {
+                    horizontalGradientRGBABuffer.put(pos, (byte) 255);
+                }
+
+                // Process too close pixels
+                if (tooCloseInfo != null && y < tooCloseInfo.length && x < tooCloseInfo[y].length && tooCloseInfo[y][x]) {
+                    tooCloseRGBABuffer.put(pos, (byte) 255);
+                    tooCloseRGBABuffer.put(pos + 1, (byte) 0);
+                    tooCloseRGBABuffer.put(pos + 2, (byte) 0);
+                    tooCloseRGBABuffer.put(pos + 3, (byte) 255);
+                }
+            }
+        }
+
+        // Rewind all buffers once after processing
+        closerNextRGBABuffer.rewind();
+        verticalFartherRGBABuffer.rewind();
+        horizontalGradientRGBABuffer.rewind();
+        tooCloseRGBABuffer.rewind();
+    }
+
+    /**
+     * Uploads all textures with optimized parameters in a single batch.
+     * This reduces OpenGL state changes and improves performance.
+     */
+    private void uploadAllTexturesUnified(int width, int height, int internalFormat) {
+        // Define texture parameters once
+        int[] textureParams = {
+            GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_NEAREST,
+            GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_NEAREST,
+            GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE,
+            GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE
+        };
+
+        // Upload gradient texture
+        uploadSingleTexture(gradientTextureId, gradientRGBABuffer, width, height, internalFormat, textureParams);
+
+        // Upload closer next texture
+        uploadSingleTexture(closerNextTextureId, closerNextRGBABuffer, width, height, internalFormat, textureParams);
+
+        // Upload vertical farther texture
+        uploadSingleTexture(verticalFartherTextureId, verticalFartherRGBABuffer, width, height, internalFormat, textureParams);
+
+        // Upload horizontal gradient texture
+        uploadSingleTexture(horizontalGradientTextureId, horizontalGradientRGBABuffer, width, height, internalFormat, textureParams);
+
+        // Upload too close texture
+        uploadSingleTexture(tooCloseTextureId, tooCloseRGBABuffer, width, height, internalFormat, textureParams);
+    }
+
+    /**
+     * Helper method to upload a single texture with optimized parameters.
+     */
+    private void uploadSingleTexture(int textureId, ByteBuffer buffer, int width, int height,
+                                   int internalFormat, int[] textureParams) {
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId);
+
+        // Set texture parameters efficiently
+        for (int i = 0; i < textureParams.length; i += 2) {
+            GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, textureParams[i], textureParams[i + 1]);
+        }
+
+        // Upload texture data
+        GLES20.glTexImage2D(
+            GLES20.GL_TEXTURE_2D,
+            0,
+            internalFormat,
+            width,
+            height,
+            0,
+            GLES20.GL_RGBA,
+            GLES20.GL_UNSIGNED_BYTE,
+            buffer);
     }
 }

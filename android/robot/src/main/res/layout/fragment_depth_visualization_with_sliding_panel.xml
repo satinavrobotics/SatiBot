@@ -216,6 +216,64 @@
                     android:textColor="#FFFFFF" />
             </LinearLayout>
 
+            <!-- Too Close Threshold -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Too Close Threshold"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <SeekBar
+                    android:id="@+id/tooCloseThresholdSeekBar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="100" />
+
+                <TextView
+                    android:id="@+id/tooCloseThresholdValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="100cm"
+                    android:textColor="#FFFFFF" />
+            </LinearLayout>
+
+            <!-- Too Close Visualization Toggle -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Show Too Close"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/showTooCloseSwitch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
             <!-- Histogram Settings removed -->
 
             <!-- NNAPI Switch (only visible when ONNX is selected) -->
@@ -257,26 +315,94 @@
                 android:visibility="gone">
 
                 <TextView
-                    android:text="isCloserNext Threshold"
+                    android:text="Vertical Closer Threshold"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textColor="#FFFFFF"/>
                 <SeekBar
-                    android:id="@+id/closerNextThresholdSeekBar"
+                    android:id="@+id/verticalCloserThresholdSeekBar"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:max="1000"/>
                 <TextView
-                    android:id="@+id/closerNextThresholdValue"
+                    android:id="@+id/verticalCloserThresholdValue"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="0 mm"
                     android:textColor="#FFFFFF"/>
 
                 <TextView
+                    android:text="Vertical Farther Threshold"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="#FFFFFF"/>
+                <SeekBar
+                    android:id="@+id/verticalFartherThresholdSeekBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="10000"/>
+                <TextView
+                    android:id="@+id/verticalFartherThresholdValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 mm"
+                    android:textColor="#FFFFFF"/>
+
+                <!-- Visualization Control Switches -->
+                <TextView
+                    android:text="Visualization Controls"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:textColor="#FFFFFF"
+                    android:textStyle="bold"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="8dp">
+
+                    <TextView
+                        android:text="Show Vertical Closer"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#FFFFFF"/>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/showVerticalCloserSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="4dp">
+
+                    <TextView
+                        android:text="Show Vertical Farther"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="#FFFFFF"/>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/showVerticalFartherSwitch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"/>
+                </LinearLayout>
+
+                <TextView
                     android:text="Maximum Safe Distance"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
                     android:textColor="#FFFFFF"/>
                 <SeekBar
                     android:id="@+id/maxSafeDistanceSeekBar"

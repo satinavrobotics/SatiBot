@@ -17,6 +17,7 @@ import java.nio.FloatBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -370,9 +371,13 @@ public class ONNXDepthImageGenerator implements DepthImageGenerator {
      * @return A FloatBuffer containing the raw depth values from the model
      */
     private FloatBuffer runInferenceOptimized() {
-        // Check if session is valid before proceeding
-        if (ortSession == null || ortEnvironment == null) {
-            Timber.e("Cannot run inference - OrtSession or OrtEnvironment is null");
+        // Comprehensive validation before proceeding
+        if (!validateSessionState()) {
+            return null;
+        }
+
+        // Validate input buffers
+        if (!validateInputBuffers()) {
             return null;
         }
 
@@ -383,22 +388,57 @@ public class ONNXDepthImageGenerator implements DepthImageGenerator {
             // The model expects NHWC format (batch, height, width, channels)
             long[] shape = {1, modelInputHeight, modelInputWidth, 3};
 
-            // Reuse the preallocated buffer
+            // Validate shape dimensions
+            if (shape[1] <= 0 || shape[2] <= 0 || shape[3] <= 0) {
+                Timber.e("Invalid input shape: [%d, %d, %d, %d]", shape[0], shape[1], shape[2], shape[3]);
+                return null;
+            }
+
+            // Reuse the preallocated buffer with safety checks
+            if (uint8Buffer == null || inputBuffer == null) {
+                Timber.e("Input buffers are null, cannot proceed with inference");
+                return null;
+            }
+
             uint8Buffer.clear();
 
             // Copy data from input buffer directly without intermediate byte array
             inputBuffer.rewind();
+
+            // Validate buffer capacity before copying
+            int requiredCapacity = modelInputHeight * modelInputWidth * 3;
+            if (inputBuffer.capacity() < requiredCapacity) {
+                Timber.e("Input buffer too small: %d < %d", inputBuffer.capacity(), requiredCapacity);
+                return null;
+            }
+
+            if (uint8Buffer.capacity() < requiredCapacity) {
+                Timber.e("UINT8 buffer too small: %d < %d", uint8Buffer.capacity(), requiredCapacity);
+                return null;
+            }
+
             uint8Buffer.put(inputBuffer);
             uint8Buffer.rewind();
 
             // Create tensor with UINT8 type - reuse the same buffer
-            inputTensor = OnnxTensor.createTensor(ortEnvironment, uint8Buffer, shape, OnnxJavaType.UINT8);
+            try {
+                inputTensor = OnnxTensor.createTensor(ortEnvironment, uint8Buffer, shape, OnnxJavaType.UINT8);
+            } catch (Exception e) {
+                Timber.e(e, "Failed to create input tensor: %s", e.getMessage());
+                return null;
+            }
+
+            // Validate input tensor
+            if (inputTensor == null) {
+                Timber.e("Failed to create input tensor");
+                return null;
+            }
 
             // Create input map - reuse the same input name
             Map<String, OnnxTensor> inputs = new HashMap<>();
             inputs.put(inputName, inputTensor);
 
-            // Run inference - capture the session in a local variable to prevent race conditions
+            // Run inference with comprehensive error handling
             OrtSession currentSession = ortSession;
             if (currentSession == null) {
                 Timber.e("OrtSession became null during inference");
@@ -406,10 +446,31 @@ public class ONNXDepthImageGenerator implements DepthImageGenerator {
             }
 
             try {
+                // Add memory check before inference
+                Runtime runtime = Runtime.getRuntime();
+                long freeMemory = runtime.freeMemory();
+                long totalMemory = runtime.totalMemory();
+                long usedMemory = totalMemory - freeMemory;
+
+                // If we're using more than 80% of available memory, trigger GC
+                if (usedMemory > totalMemory * 0.8) {
+                    Timber.w("High memory usage detected (%d/%d), triggering GC", usedMemory, totalMemory);
+                    System.gc();
+                }
+
                 output = currentSession.run(inputs);
             } catch (IllegalStateException e) {
                 // This can happen if the session was closed while we were trying to use it
                 Timber.e(e, "Session was closed during inference: %s", e.getMessage());
+                return null;
+            } catch (OutOfMemoryError e) {
+                // Handle out of memory errors gracefully
+                Timber.e(e, "Out of memory during inference: %s", e.getMessage());
+                System.gc(); // Try to free memory
+                return null;
+            } catch (Exception e) {
+                // Catch any other runtime exceptions from ONNX
+                Timber.e(e, "Unexpected error during ONNX inference: %s", e.getMessage());
                 return null;
             }
 
@@ -478,9 +539,6 @@ public class ONNXDepthImageGenerator implements DepthImageGenerator {
 
             return depthValuesCopy;
 
-        } catch (OrtException e) {
-            Timber.e(e, "ONNX Runtime error: %s", e.getMessage());
-            return null;
         } catch (Exception e) {
             Timber.e(e, "Unexpected error during inference: %s", e.getMessage());
             return null;
@@ -1103,6 +1161,80 @@ public class ONNXDepthImageGenerator implements DepthImageGenerator {
         Timber.d("Successfully created ONNX session with CPU provider");
 
         return newSession;
+    }
+
+    /**
+     * Validates the current session state to ensure it's safe to run inference.
+     * @return true if the session is valid and ready for inference
+     */
+    private boolean validateSessionState() {
+        if (ortSession == null) {
+            Timber.e("OrtSession is null");
+            return false;
+        }
+
+        if (ortEnvironment == null) {
+            Timber.e("OrtEnvironment is null");
+            return false;
+        }
+
+        if (inputName == null || inputName.isEmpty()) {
+            Timber.e("Input name is null or empty");
+            return false;
+        }
+
+        // Check if the session is still valid by trying to get input names
+        try {
+            Set<String> inputNames = ortSession.getInputNames();
+            if (inputNames == null || inputNames.isEmpty()) {
+                Timber.e("Session has no input names");
+                return false;
+            }
+            if (!inputNames.contains(inputName)) {
+                Timber.e("Session does not contain expected input name: %s", inputName);
+                return false;
+            }
+        } catch (Exception e) {
+            Timber.e(e, "Error validating session state: %s", e.getMessage());
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Validates the input buffers to ensure they're properly allocated and sized.
+     * @return true if the input buffers are valid
+     */
+    private boolean validateInputBuffers() {
+        if (inputBuffer == null) {
+            Timber.e("Input buffer is null");
+            return false;
+        }
+
+        if (uint8Buffer == null) {
+            Timber.e("UINT8 buffer is null");
+            return false;
+        }
+
+        int requiredCapacity = modelInputHeight * modelInputWidth * 3;
+
+        if (inputBuffer.capacity() < requiredCapacity) {
+            Timber.e("Input buffer capacity insufficient: %d < %d", inputBuffer.capacity(), requiredCapacity);
+            return false;
+        }
+
+        if (uint8Buffer.capacity() < requiredCapacity) {
+            Timber.e("UINT8 buffer capacity insufficient: %d < %d", uint8Buffer.capacity(), requiredCapacity);
+            return false;
+        }
+
+        if (modelInputWidth <= 0 || modelInputHeight <= 0) {
+            Timber.e("Invalid model input dimensions: %dx%d", modelInputWidth, modelInputHeight);
+            return false;
+        }
+
+        return true;
     }
 
 }

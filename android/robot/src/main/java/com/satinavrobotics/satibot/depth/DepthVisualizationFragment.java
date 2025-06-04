@@ -58,6 +58,9 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
     // UI elements specific to visualization (common ones are in base class)
     private SeekBar confidenceThresholdSeekBar;
     private TextView confidenceThresholdValueTextView;
+    private SeekBar tooCloseThresholdSeekBar;
+    private TextView tooCloseThresholdValueTextView;
+    private androidx.appcompat.widget.SwitchCompat showTooCloseSwitch;
     private RadioGroup visualizationModeRadioGroup;
     private Spinner depthSourceSpinner;
     private ImageButton toggleControlPanelButton;
@@ -66,10 +69,16 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
 
     // ONNX-specific UI elements
     private View onnxSettingsContainer;
-    private SeekBar closerNextThresholdSeekBar;
-    private TextView closerNextThresholdValueTextView;
+    private SeekBar verticalCloserThresholdSeekBar;
+    private TextView verticalCloserThresholdValueTextView;
+    private SeekBar verticalFartherThresholdSeekBar;
+    private TextView verticalFartherThresholdValueTextView;
     private SeekBar maxSafeDistanceSeekBar;
     private TextView maxSafeDistanceValueTextView;
+
+    // Visualization control switches
+    private androidx.appcompat.widget.SwitchCompat showVerticalCloserSwitch;
+    private androidx.appcompat.widget.SwitchCompat showVerticalFartherSwitch;
     private SeekBar consecutiveThresholdSeekBar;
     private TextView consecutiveThresholdValueTextView;
     private SeekBar downsampleFactorSeekBar;
@@ -110,6 +119,9 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
         // Find visualization-specific UI elements
         confidenceThresholdSeekBar = view.findViewById(R.id.confidenceThresholdSeekBar);
         confidenceThresholdValueTextView = view.findViewById(R.id.confidenceThresholdValue);
+        tooCloseThresholdSeekBar = view.findViewById(R.id.tooCloseThresholdSeekBar);
+        tooCloseThresholdValueTextView = view.findViewById(R.id.tooCloseThresholdValue);
+        showTooCloseSwitch = view.findViewById(R.id.showTooCloseSwitch);
         visualizationModeRadioGroup = view.findViewById(R.id.visualizationModeRadioGroup);
         depthSourceSpinner = view.findViewById(R.id.depthSourceSpinner);
         toggleControlPanelButton = view.findViewById(R.id.toggleControlPanelButton);
@@ -119,10 +131,16 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
 
         // Find ONNX-specific UI elements
         onnxSettingsContainer = view.findViewById(R.id.onnxSettingsContainer);
-        closerNextThresholdSeekBar = view.findViewById(R.id.closerNextThresholdSeekBar);
-        closerNextThresholdValueTextView = view.findViewById(R.id.closerNextThresholdValue);
+        verticalCloserThresholdSeekBar = view.findViewById(R.id.verticalCloserThresholdSeekBar);
+        verticalCloserThresholdValueTextView = view.findViewById(R.id.verticalCloserThresholdValue);
+        verticalFartherThresholdSeekBar = view.findViewById(R.id.verticalFartherThresholdSeekBar);
+        verticalFartherThresholdValueTextView = view.findViewById(R.id.verticalFartherThresholdValue);
         maxSafeDistanceSeekBar = view.findViewById(R.id.maxSafeDistanceSeekBar);
         maxSafeDistanceValueTextView = view.findViewById(R.id.maxSafeDistanceValue);
+
+        // Find visualization control switches
+        showVerticalCloserSwitch = view.findViewById(R.id.showVerticalCloserSwitch);
+        showVerticalFartherSwitch = view.findViewById(R.id.showVerticalFartherSwitch);
         consecutiveThresholdSeekBar = view.findViewById(R.id.consecutiveThresholdSeekBar);
         consecutiveThresholdValueTextView = view.findViewById(R.id.consecutiveThresholdValue);
         downsampleFactorSeekBar = view.findViewById(R.id.downsampleFactorSeekBar);
@@ -229,6 +247,43 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
             }
         });
 
+        // Set up the too close threshold seek bar
+        tooCloseThresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @SuppressLint("DefaultLocale")
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // Convert progress (0-100) to centimeters, with minimum of 1cm
+                float thresholdCm = Math.max(1.0f, progress);
+                // Convert centimeters to millimeters for internal processing
+                float thresholdMm = thresholdCm * 10.0f;
+                tooCloseThresholdValueTextView.setText(String.format("%.0fcm", thresholdCm));
+
+                // Update the RobotParametersManager
+                RobotParametersManager.getInstance().setTooCloseThreshold(thresholdMm);
+
+                // Update the DepthProcessor directly for immediate effect
+                if (depthProcessor != null) {
+                    depthProcessor.setTooCloseThreshold(thresholdMm);
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+
+        // Set up the too close visualization toggle switch
+        showTooCloseSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (depthMapRenderer != null) {
+                depthMapRenderer.setShowTooClose(isChecked);
+                Timber.d("Too close visualization %s", isChecked ? "enabled" : "disabled");
+            }
+        });
+
         // Set up the visualization mode radio group
         visualizationModeRadioGroup.setOnCheckedChangeListener((group, checkedId) -> {
             if (depthMapRenderer != null) {
@@ -323,16 +378,37 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
 
 
         // Set up ONNX-specific settings
-        closerNextThresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        verticalCloserThresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @SuppressLint("DefaultLocale")
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 // Convert progress (0-1000) to millimeters (0-100mm)
                 float thresholdMm = progress / 10.0f;
-                closerNextThresholdValueTextView.setText(String.format("%.1f mm", thresholdMm));
+                verticalCloserThresholdValueTextView.setText(String.format("%.1f mm", thresholdMm));
 
                 // Store the value in RobotParametersManager
-                RobotParametersManager.getInstance().setCloserNextThreshold(thresholdMm);
+                RobotParametersManager.getInstance().setVerticalCloserThreshold(thresholdMm);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+
+        verticalFartherThresholdSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @SuppressLint("DefaultLocale")
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // Convert progress (0-10000) to millimeters (0-1000mm)
+                float thresholdMm = progress / 10.0f;
+                verticalFartherThresholdValueTextView.setText(String.format("%.1f mm", thresholdMm));
+
+                // Store the value in RobotParametersManager
+                RobotParametersManager.getInstance().setVerticalFartherThreshold(thresholdMm);
             }
 
             @Override
@@ -510,6 +586,21 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
             }
         });
 
+        // Set up visualization control switches
+        showVerticalCloserSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (depthMapRenderer != null) {
+                depthMapRenderer.setShowVerticalCloser(isChecked);
+                Timber.d("Show vertical closer visualization: %s", isChecked ? "enabled" : "disabled");
+            }
+        });
+
+        showVerticalFartherSwitch.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            if (depthMapRenderer != null) {
+                depthMapRenderer.setShowVerticalFarther(isChecked);
+                Timber.d("Show vertical farther visualization: %s", isChecked ? "enabled" : "disabled");
+            }
+        });
+
         installRequested = false;
         displayRotationHelper = new DisplayRotationHelper(requireContext());
     }
@@ -594,7 +685,14 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
                         return;
                     }
                     updateStatusText("Switching to ONNX Runtime depth source");
-                    newGenerator = new ONNXDepthImageGenerator();
+                    try {
+                        newGenerator = new ONNXDepthImageGenerator();
+                    } catch (Exception e) {
+                        Timber.e(e, "Failed to create ONNX depth generator: %s", e.getMessage());
+                        updateStatusText("ONNX initialization failed, falling back to ARCore");
+                        depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                        return;
+                    }
                     break;
 
                 case DEPTH_SOURCE_ARCORE:
@@ -635,6 +733,27 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
             } catch (IOException e) {
                 Timber.e(e, "Error setting depth image generator: %s", e.getMessage());
                 updateStatusText("Error setting depth image generator: " + e.getMessage());
+
+                // If ONNX failed, automatically fall back to ARCore
+                if (currentDepthSource == DEPTH_SOURCE_ONNX) {
+                    Timber.w("ONNX depth generator failed to initialize, falling back to ARCore");
+                    updateStatusText("ONNX failed, switching to ARCore...");
+                    requireActivity().runOnUiThread(() -> {
+                        depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                    });
+                }
+            } catch (Exception e) {
+                Timber.e(e, "Unexpected error setting depth image generator: %s", e.getMessage());
+                updateStatusText("Unexpected error: " + e.getMessage());
+
+                // For any unexpected error with ONNX, fall back to ARCore
+                if (currentDepthSource == DEPTH_SOURCE_ONNX) {
+                    Timber.w("Unexpected error with ONNX, falling back to ARCore");
+                    updateStatusText("ONNX error, switching to ARCore...");
+                    requireActivity().runOnUiThread(() -> {
+                        depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                    });
+                }
             }
 
             // Set the confidence threshold
@@ -662,10 +781,30 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
 
         // Define the runnable that checks initialization status
         Runnable initCheckRunnable = new Runnable() {
+            private int checkCount = 0;
+            private static final int MAX_CHECKS = 20; // Maximum number of checks (10 seconds at 500ms intervals)
+
             @Override
             public void run() {
+                checkCount++;
+
                 if (depthProcessor != null && depthProcessor.getDepthImageGenerator() != null) {
-                    boolean isInitialized = depthProcessor.getDepthImageGenerator().isInitialized();
+                    boolean isInitialized = false;
+                    try {
+                        isInitialized = depthProcessor.getDepthImageGenerator().isInitialized();
+                    } catch (Exception e) {
+                        Timber.e(e, "Error checking depth generator initialization: %s", e.getMessage());
+
+                        // If ONNX is failing during initialization checks, fall back to ARCore
+                        if (currentDepthSource == DEPTH_SOURCE_ONNX) {
+                            Timber.w("ONNX depth generator failed during initialization check, falling back to ARCore");
+                            updateStatusText("ONNX initialization failed, switching to ARCore...");
+                            requireActivity().runOnUiThread(() -> {
+                                depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                            });
+                        }
+                        return;
+                    }
 
                     if (isInitialized) {
                         // The generator is now initialized
@@ -677,6 +816,25 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
                             updateStatusText("ARCore depth source initialized");
                         }
                     } else {
+                        // Check if we've exceeded the maximum number of checks
+                        if (checkCount >= MAX_CHECKS) {
+                            if (currentDepthSource == DEPTH_SOURCE_ONNX) {
+                                Timber.w("ONNX initialization timeout, falling back to ARCore");
+                                updateStatusText("ONNX initialization timeout, switching to ARCore...");
+                                requireActivity().runOnUiThread(() -> {
+                                    depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                                });
+                                return;
+                            } else if (currentDepthSource == DEPTH_SOURCE_TFLITE) {
+                                Timber.w("TensorFlow Lite initialization timeout, falling back to ARCore");
+                                updateStatusText("TensorFlow Lite initialization timeout, switching to ARCore...");
+                                requireActivity().runOnUiThread(() -> {
+                                    depthSourceSpinner.setSelection(DEPTH_SOURCE_ARCORE);
+                                });
+                                return;
+                            }
+                        }
+
                         // Still waiting for initialization
                         if (currentDepthSource == DEPTH_SOURCE_TFLITE) {
                             updateStatusText("Waiting for TensorFlow Lite initialization...");
@@ -689,7 +847,12 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
                     }
                 } else {
                     // DepthProcessor not created yet or no depth image generator set, check again later
-                    initCheckHandler.postDelayed(this, INIT_CHECK_DELAY_MS);
+                    if (checkCount < MAX_CHECKS) {
+                        initCheckHandler.postDelayed(this, INIT_CHECK_DELAY_MS);
+                    } else {
+                        Timber.w("Depth processor initialization timeout");
+                        updateStatusText("Depth processor initialization timeout");
+                    }
                 }
             }
         };
@@ -837,14 +1000,24 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
             // Initialize ONNX-specific settings from RobotParametersManager
             RobotParametersManager robotParams = RobotParametersManager.getInstance();
 
-            // Get and set closerNextThreshold from RobotParametersManager
-            float closerNextThreshold = robotParams.getCloserNextThreshold();
+            // Get and set verticalCloserThreshold from RobotParametersManager
+            float verticalCloserThreshold = robotParams.getVerticalCloserThreshold();
 
             // Update UI elements on the main thread
             requireActivity().runOnUiThread(() -> {
-                int progress = (int)(closerNextThreshold * 10.0f); // Convert mm to progress value
-                closerNextThresholdSeekBar.setProgress(progress);
-                closerNextThresholdValueTextView.setText(String.format("%.1f mm", closerNextThreshold));
+                int progress = (int)(verticalCloserThreshold * 10.0f); // Convert mm to progress value
+                verticalCloserThresholdSeekBar.setProgress(progress);
+                verticalCloserThresholdValueTextView.setText(String.format("%.1f mm", verticalCloserThreshold));
+            });
+
+            // Get and set verticalFartherThreshold from RobotParametersManager
+            float verticalFartherThreshold = robotParams.getVerticalFartherThreshold();
+
+            // Update UI elements on the main thread
+            requireActivity().runOnUiThread(() -> {
+                int progress = (int)(verticalFartherThreshold * 10.0f); // Convert mm to progress value (0-1000mm -> 0-10000)
+                verticalFartherThresholdSeekBar.setProgress(progress);
+                verticalFartherThresholdValueTextView.setText(String.format("%.1f mm", verticalFartherThreshold));
             });
 
             // Get and set maxSafeDistance from RobotParametersManager
@@ -967,6 +1140,19 @@ public class DepthVisualizationFragment extends BaseDepthFragment {
             requireActivity().runOnUiThread(() -> {
                 float threshold = confidenceThresholdSeekBar.getProgress() / 255.0f;
                 depthMapRenderer.setConfidenceThreshold(threshold);
+            });
+
+            // Set initial values for too close threshold
+            requireActivity().runOnUiThread(() -> {
+                float tooCloseThresholdMm = robotParams.getTooCloseThreshold();
+                // Convert millimeters to centimeters for the seekbar
+                int tooCloseThresholdCm = (int) (tooCloseThresholdMm / 10.0f);
+                tooCloseThresholdSeekBar.setProgress(tooCloseThresholdCm);
+                tooCloseThresholdValueTextView.setText(String.format("%.0fcm", (float) tooCloseThresholdCm));
+
+                // Set initial visualization toggle state
+                showTooCloseSwitch.setChecked(true);
+                depthMapRenderer.setShowTooClose(true);
             });
 
             // Get the color mode from the UI thread and set it

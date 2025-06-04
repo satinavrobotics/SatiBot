@@ -17,7 +17,7 @@ import com.satinavrobotics.satibot.utils.PermissionUtils;
 
 import timber.log.Timber;
 
-public class LiveKitInfoFragment extends Fragment {
+public class LiveKitInfoFragment extends Fragment implements LiveKitServer.ConnectionStateListener {
 
     private FragmentLivekitInfoBinding binding;
     private LiveKitServer liveKitServer;
@@ -38,8 +38,10 @@ public class LiveKitInfoFragment extends Fragment {
         setupUI();
         updateConnectionStatus();
 
-        // Update status every 2 seconds
-        view.postDelayed(this::updateConnectionStatus, 2000);
+        // Register for connection state updates
+        if (liveKitServer != null) {
+            liveKitServer.addConnectionStateListener(this);
+        }
     }
 
     private void setupUI() {
@@ -62,8 +64,7 @@ public class LiveKitInfoFragment extends Fragment {
                 liveKitServer.connect();
             }
 
-            // Update status after a short delay
-            binding.getRoot().postDelayed(this::updateConnectionStatus, 1000);
+            // Connection state will be updated automatically via listener
         });
 
         binding.refreshTokenButton.setOnClickListener(v -> {
@@ -92,8 +93,7 @@ public class LiveKitInfoFragment extends Fragment {
                 }
             }, 3000);
 
-            // Update status after a short delay
-            binding.getRoot().postDelayed(this::updateConnectionStatus, 1000);
+            // Connection state will be updated automatically via listener
         });
 
         binding.reinitializeButton.setOnClickListener(v -> {
@@ -158,11 +158,6 @@ public class LiveKitInfoFragment extends Fragment {
             binding.connectionStatusText.setText("Error");
             binding.connectionStatusText.setTextColor(getResources().getColor(R.color.red, null));
         }
-
-        // Schedule next update
-        if (binding != null) {
-            binding.getRoot().postDelayed(this::updateConnectionStatus, 2000);
-        }
     }
 
     /**
@@ -192,6 +187,20 @@ public class LiveKitInfoFragment extends Fragment {
     @Override
     public void onDestroyView() {
         super.onDestroyView();
+
+        // Unregister from connection state updates
+        if (liveKitServer != null) {
+            liveKitServer.removeConnectionStateListener(this);
+        }
+
         binding = null;
+    }
+
+    @Override
+    public void onConnectionStateChanged(boolean connected, io.livekit.android.room.Room.State roomState) {
+        // Update UI on main thread when connection state changes
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(this::updateConnectionStatus);
+        }
     }
 }
