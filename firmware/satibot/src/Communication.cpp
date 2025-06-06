@@ -134,8 +134,6 @@ void Communication::processCtrlMsg() {
     // Set velocity directly using the VelocityController
     velocityController->setTargetLinearVelocity(linearVelocity);
     velocityController->setTargetAngularVelocity(angularVelocity);
-
-    // Controller is always enabled
 }
 
 void Communication::processHeartbeatMsg() {
