@@ -268,6 +268,50 @@ void Communication::onBleRx(char inChar) {
 }
 #endif
 
+#if defined(ESP32)
+
+// 🧠 1. I²C Receive Handler — Jetson sends IMU data - Cimbi
+void Communication::receiveHandler(int numBytes) {
+    if (numBytes < 25) return;  // Expect at least 1 + 6 floats = 25 bytes
+
+    byte buf[25];
+    Wire.readBytes(buf, numBytes);
+
+    if (buf[0] != 0x01) return;  // 0x01 = IMU packet identifier
+
+    float ax, ay, az, gx, gy, gz;
+    memcpy(&ax, &buf[1], 4);
+    memcpy(&ay, &buf[5], 4);
+    memcpy(&az, &buf[9], 4);
+    memcpy(&gx, &buf[13], 4);
+    memcpy(&gy, &buf[17], 4);
+    memcpy(&gz, &buf[21], 4);
+
+    // 🔄 Forward IMU data to Sensors singleton
+    if (sensorsInstance != nullptr) {
+        sensorsInstance->updateIMUFromJetson(ax, ay, az, gx, gy, gz);
+    }
+}
+
+// 🧠 2. I²C Request Handler — Jetson wants odometry
+void Communication::requestHandler() {
+    if (velocityController == nullptr) return;
+
+    float x = velocityController->getX();
+    float y = velocityController->getY();
+    float theta = velocityController->getHeading();
+
+    // ⬅ Prepare odometry message (ID + 3 floats = 13 bytes)
+    byte outbuf[13];
+    outbuf[0] = 0x03;  // Identifier for odometry
+    memcpy(&outbuf[1], &x, 4);
+    memcpy(&outbuf[5], &y, 4);
+    memcpy(&outbuf[9], &theta, 4);
+
+    Wire.write(outbuf, 13);  // Send to Jetson 
+} 
+
+#endif // Cimbi
 
 void Communication::processMotorControlMsg() {
     // Check if message is empty - if so, send current configuration

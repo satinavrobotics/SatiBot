@@ -12,6 +12,10 @@
 #include <BLE2902.h>
 #endif
 
+#if defined(ESP32)
+#include <Wire.h>  // 🔼 Required for I²C slave communication
+#endif
+
 enum MsgParts {
     HEADER,
     BODY
@@ -22,6 +26,7 @@ enum MsgParts {
 class MyServerCallbacks;
 class MyCallbacks;
 #endif
+
 
 class Communication {
 public:
@@ -40,6 +45,12 @@ public:
     // Heartbeat management
     void updateHeartbeat();
     bool isHeartbeatExpired();
+
+    #if defined(ESP32) // Cimbi
+        // 🔼 Static I2C slave handlers
+        static void receiveHandler(int numBytes);   // Called when Jetson sends data
+        static void requestHandler();              // Called when Jetson requests odometry
+    #endif
 
 #if defined(ESP32)
     // Bluetooth management

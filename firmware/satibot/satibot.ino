@@ -3,6 +3,7 @@
 #include "include/Communication.h"
 #include "include/Sensors.h"
 #include "include/VelocityController.h"
+#include <Wire.h>  // 🔼 Enables ESP32 I2C slave
 
 // ESP32 specific includes
 #if defined(ESP32)
@@ -23,6 +24,7 @@ VelocityController* velocityController;
 // Make velocityController accessible to other files
 extern VelocityController* velocityController;
 
+/* - Cimbi -
 // Timer for IMU readings
 #if defined(ESP32)
 esp_timer_handle_t imu_timer;
@@ -35,10 +37,16 @@ void IRAM_ATTR imu_timer_callback(void* arg) {
   }
 }
 #endif
+*/
 
 void setup() {
   // Initialize configuration
   config = new Config(OPENBOT_TYPE);
+
+  // Cimbi - for I²C 
+  Wire.begin(0x10);  // 🔼 ESP32 acts as I²C slave at address 0x10
+  Wire.onReceive(Communication::receiveHandler);   // 🔼 Callback: data received from Jetson
+  Wire.onRequest(Communication::requestHandler);   // 🔼 Callback: respond to odom requests
 
   // Initialize motors
   motors = new Motors(config);
@@ -69,6 +77,7 @@ void setup() {
     // Initialize status LEDs if available
   }
 
+  /* - Cimbi - 
   // Set up the IMU timer on ESP32
   #if defined(ESP32)
     // Disable WiFi to save power
@@ -85,6 +94,7 @@ void setup() {
     ESP_ERROR_CHECK(esp_timer_create(&imu_timer_args, &imu_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(imu_timer, 2000)); // 2000 microseconds = 2ms
   #endif
+  */
 }
 
 void loop() {
